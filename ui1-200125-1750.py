@@ -30,6 +30,9 @@ class Ui_MainWindow(object):
         self.paramButton = QtWidgets.QPushButton(self.paramFrame)
         self.paramButton.setGeometry(QtCore.QRect(0, 0, 191, 23))
         self.paramButton.setObjectName("paramButton")
+
+        self.paramButton.clicked.connect(self.handleParamButtonClicked)
+
         self.paramEditFrame = QtWidgets.QFrame(self.paramFrame)
         self.paramEditFrame.setGeometry(QtCore.QRect(0, 20, 191, 221))
         self.paramEditFrame.setObjectName("paramEditFrame")
@@ -84,6 +87,9 @@ class Ui_MainWindow(object):
         self.scaleComboBox.addItem("")
         self.scaleComboBox.addItem("")
         self.scaleComboBox.addItem("")
+
+        self.scaleComboBox.activated[str].connect(self.onScaleChange)
+
         self.formLayout.setWidget(5, QtWidgets.QFormLayout.FieldRole, self.scaleComboBox)
         self.dimensionLabel = QtWidgets.QLabel(self.formLayoutWidget)
         self.dimensionLabel.setObjectName("dimensionLabel")
@@ -177,6 +183,12 @@ class Ui_MainWindow(object):
         self.actionExportGraph.setText(_translate("MainWindow", "Export Spectrogram"))
         self.actionExportParam.setText(_translate("MainWindow", "Export Parameters"))
         self.actionSaveAs.setText(_translate("MainWindow", "Save As..."))
+
+    def handleParamButtonClicked(self):
+        self.paramEditFrame.setVisible(not self.paramEditFrame.isVisible())
+
+    def onScaleChange(self, text):
+        self.dimensionLineEdit.setEnabled(text == "Mel")
 
 
 if __name__ == "__main__":
