@@ -74,7 +74,7 @@ class UI(QMainWindow):
         self.ax = self.canvas.figure.subplots()
 
         # Mel spectrograms are created differently in Librosa
-        if self.windowingComboBox.currentText() == "Mel":
+        if self.scaleComboBox.currentText() == "Mel":
             s = librosa.feature.melspectrogram(y=y, sr=sr, n_mels=int(self.dimensionLineEdit.text()),
                                                n_fft=int(self.fftLineEdit.text()),
                                                hop_length=int(self.hopLineEdit.text()),

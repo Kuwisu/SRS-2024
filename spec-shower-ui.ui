@@ -144,26 +144,6 @@
          </item>
          <item>
           <property name="text">
-           <string>Gaussian</string>
-          </property>
-         </item>
-         <item>
-          <property name="text">
-           <string>Blackman-Harris</string>
-          </property>
-         </item>
-         <item>
-          <property name="text">
-           <string>Flat Top</string>
-          </property>
-         </item>
-         <item>
-          <property name="text">
-           <string>Triangular</string>
-          </property>
-         </item>
-         <item>
-          <property name="text">
            <string>Rectangular</string>
           </property>
          </item>
