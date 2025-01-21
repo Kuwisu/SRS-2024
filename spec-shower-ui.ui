@@ -39,7 +39,7 @@
       <x>620</x>
       <y>10</y>
       <width>211</width>
-      <height>251</height>
+      <height>241</height>
      </rect>
     </property>
     <property name="frameShape">
@@ -65,7 +65,7 @@
      <property name="geometry">
       <rect>
        <x>0</x>
-       <y>30</y>
+       <y>20</y>
        <width>211</width>
        <height>221</height>
       </rect>
@@ -77,7 +77,7 @@
       <property name="geometry">
        <rect>
         <x>10</x>
-        <y>10</y>
+        <y>0</y>
         <width>191</width>
         <height>181</height>
        </rect>
@@ -190,7 +190,7 @@
      <widget class="QPushButton" name="createButton">
       <property name="geometry">
        <rect>
-        <x>40</x>
+        <x>30</x>
         <y>190</y>
         <width>141</width>
         <height>23</height>
@@ -201,6 +201,8 @@
       </property>
      </widget>
     </widget>
+    <zorder>paramEditFrame</zorder>
+    <zorder>paramButton</zorder>
    </widget>
   </widget>
   <widget class="QMenuBar" name="menubar">
@@ -216,16 +218,24 @@
     <property name="title">
      <string>File</string>
     </property>
+    <widget class="QMenu" name="menuExport_Parameters">
+     <property name="title">
+      <string>Export Parameters</string>
+     </property>
+     <addaction name="actionCopy"/>
+     <addaction name="actionSaveTxt"/>
+    </widget>
+    <widget class="QMenu" name="menuExport_Spectrogram">
+     <property name="title">
+      <string>Export Spectrogram</string>
+     </property>
+     <addaction name="actionSavePng"/>
+    </widget>
     <addaction name="actionNew"/>
     <addaction name="actionOpen"/>
     <addaction name="separator"/>
-    <addaction name="actionSave"/>
-    <addaction name="actionSaveAs"/>
-    <addaction name="separator"/>
-    <addaction name="actionImport"/>
-    <addaction name="separator"/>
-    <addaction name="actionExportGraph"/>
-    <addaction name="actionExportParam"/>
+    <addaction name="menuExport_Spectrogram"/>
+    <addaction name="menuExport_Parameters"/>
     <addaction name="separator"/>
     <addaction name="actionSettings"/>
    </widget>
@@ -272,19 +282,24 @@
     <string>Preferences</string>
    </property>
   </action>
-  <action name="actionExportGraph">
-   <property name="text">
-    <string>Export Spectrogram</string>
-   </property>
-  </action>
-  <action name="actionExportParam">
-   <property name="text">
-    <string>Export Parameters</string>
-   </property>
-  </action>
   <action name="actionSaveAs">
    <property name="text">
     <string>Save As...</string>
+   </property>
+  </action>
+  <action name="actionCopy">
+   <property name="text">
+    <string>Copy to Clipboard</string>
+   </property>
+  </action>
+  <action name="actionSaveTxt">
+   <property name="text">
+    <string>Save as TXT</string>
+   </property>
+  </action>
+  <action name="actionSavePng">
+   <property name="text">
+    <string>Save as PNG</string>
    </property>
   </action>
  </widget>

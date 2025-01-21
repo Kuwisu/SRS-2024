@@ -26,10 +26,14 @@ class UI(QMainWindow):
 
         # Import relevant menu bar items
         self.fileName = ''
-        self.actionImport = self.findChild(QAction, 'actionImport')
-        self.actionImport.triggered.connect(self.importFile)
-        self.actionExportGraph = self.findChild(QAction, 'actionExportGraph')
-        self.actionExportParameters = self.findChild(QAction, 'actionExportParameters')
+        self.actionOpen = self.findChild(QAction, 'actionOpen')
+        self.actionOpen.triggered.connect(self.importFile)
+        self.actionSavePng = self.findChild(QAction, 'actionSavePng')
+        self.actionSavePng.triggered.connect(self.exportPng)
+        self.actionCopy = self.findChild(QAction, 'actionCopy')
+        self.actionSaveTxt = self.findChild(QAction, 'actionSaveTxt')
+        # self.actionExportGraph = self.findChild(QAction, 'actionExportGraph')
+        # self.actionExportParameters = self.findChild(QAction, 'actionExportParameters')
 
         # Import the parameter dropdown and allow it to toggle the frame on/off
         self.paramButton = self.findChild(QPushButton, 'paramButton')
@@ -69,12 +73,17 @@ class UI(QMainWindow):
         self.fileName = QFileDialog.getOpenFileName(self, 'Open audio file',
                                                      pathlib.Path().resolve().as_posix())[0]
 
+    def exportPng(self):
+        name = QFileDialog.getSaveFileName(self, 'Save file')
+        self.canvas.figure.savefig(name[0])
+
     def generate(self):
+        self.canvas.figure.clear()
         y, sr = librosa.load(self.fileName, sr=float (self.rateLineEdit.text()), mono=True)
         self.ax = self.canvas.figure.subplots()
 
         # Mel spectrograms are created differently in Librosa
-        if self.scaleComboBox.currentText() == "Mel":
+        if self.scaleComboBox.currentText().lower() == "mel":
             s = librosa.feature.melspectrogram(y=y, sr=sr, n_mels=int(self.dimensionLineEdit.text()),
                                                n_fft=int(self.fftLineEdit.text()),
                                                hop_length=int(self.hopLineEdit.text()),
@@ -89,7 +98,10 @@ class UI(QMainWindow):
                              window=self.windowingComboBox.currentText().lower())
             s_db = librosa.amplitude_to_db(numpy.abs(s), ref=numpy.max)
 
-        img = librosa.display.specshow(s_db, sr=sr, ax=self.ax)
+        y_axis = self.scaleComboBox.currentText().lower()
+        y_axis = "log" if y_axis == "logarithmic" else y_axis
+        img = librosa.display.specshow(s_db, sr=sr, ax=self.ax, x_axis='time', y_axis=y_axis)
+
         self.canvas.figure.colorbar(img, ax=self.ax)
 
         self.canvas.draw()
