@@ -1,3 +1,5 @@
+import traceback
+
 import librosa
 import librosa.feature
 import matplotlib.pyplot as plt
@@ -10,6 +12,54 @@ from PyQt5.QtWidgets import *
 from PyQt5.QtGui import *
 from PyQt5 import uic
 
+class AudioTool:
+    def __init__(self, figure):
+        self.figure = figure
+        self.fileName = ''
+        self.y = None
+        self.sr = None
+        self.colorbar = None
+        self.ax = self.figure.subplots(nrows=2, sharex=True)
+
+    def loadFile(self, file_name):
+        self.fileName = file_name
+        self.y, self.sr = librosa.load(self.fileName, mono=True)
+
+    def produceWaveform(self):
+        self.ax[0].cla()
+        librosa.display.waveshow(self.y, sr=self.sr, ax=self.ax[0])
+        self.ax[0].set_title(f"Waveform of {self.fileName.split('/')[-1]} at {self.sr}Hz")
+        self.ax[0].label_outer()
+
+    def produceSpectrogram(self, n_fft, hop_length, win_length, window, scale, n_mels):
+        self.ax[1].cla()
+
+        if scale == "mel":
+            s = librosa.feature.melspectrogram(
+                y=self.y, sr=self.sr, n_fft=n_fft, win_length=win_length,
+                hop_length=hop_length, window=window, n_mels=n_mels)
+            s_db = librosa.power_to_db(numpy.abs(s), ref=numpy.max)
+        else:
+            s = librosa.stft(self.y, n_fft=n_fft, hop_length=hop_length,
+                             win_length=win_length, window=window)
+            s_db = librosa.power_to_db(numpy.abs(s), ref=numpy.max)
+
+        img = librosa.display.specshow(s_db, sr=self.sr, ax=self.ax[1], x_axis='time', y_axis=scale)
+        if self.colorbar is None:
+            self.colorbar = self.figure.colorbar(img, ax=self.ax[1], format="%+2.f dB")
+
+        # times = librosa.frames_to_time(numpy.arange(s_db.shape[1]), sr=self.sr, hop_length=hop_length)
+        self.ax[1].set_title(f'{scale} spectrogram with {win_length} window length')
+        self.ax[1].label_outer()
+
+    def resample(self, target_sr):
+        # If attempting to resample to a larger sample rate, try to revert to
+        # the original recording.
+        if target_sr > self.sr:
+            self.loadFile(self.fileName)
+        self.y = librosa.resample(self.y, orig_sr=self.sr, target_sr=target_sr)
+        self.sr = target_sr
+
 class UI(QMainWindow):
     """
     Defines the main window and all UI interactions.
@@ -20,15 +70,16 @@ class UI(QMainWindow):
         # Load the UI file
         uic.loadUi('spec-shower-ui.ui', self)
 
-        # Import and prepare the frame
+        # Import and prepare the spectrogram display frame
         self.specFrame = self.findChild(QFrame, 'specFrame')
         self.specFrame.setLayout(QVBoxLayout())
-        self.canvas = FigureCanvasQTAgg(plt.Figure())
+        self.canvas = FigureCanvasQTAgg(plt.Figure(layout='constrained'))
         self.specFrame.layout().addWidget(self.canvas)
-        self.ax = None
+
+        # Prepare the tool that will interact with the display canvas
+        self.audioTool = AudioTool(self.canvas.figure)
 
         # Import relevant menu bar items
-        self.fileName = ''
         self.actionNew = self.findChild(QAction, 'actionNew')
         self.actionOpen = self.findChild(QAction, 'actionOpen')
         self.actionSavePng = self.findChild(QAction, 'actionSavePng')
@@ -72,10 +123,9 @@ class UI(QMainWindow):
 
     def reset(self):
         # Clear any saved sound file and generated plot
-        self.fileName = ''
         self.canvas.figure.clear()
         self.canvas.draw()
-        self.ax = None
+        self.audioTool = AudioTool(self.canvas.figure)
 
         # Configure all parameter fields to the default upon opening
         self.rateLineEdit.setText('')
@@ -92,8 +142,11 @@ class UI(QMainWindow):
         Triggers upon clicking the 'Open' option on the menu bar.
         Prompts the user to select a audio file to use from the file explorer.
         """
-        self.fileName = QFileDialog.getOpenFileName(self, 'Open audio file',
-                                                     pathlib.Path().resolve().as_posix())[0]
+        file_name = QFileDialog.getOpenFileName(self, 'Open audio file',
+                                                pathlib.Path().resolve().as_posix())[0]
+        self.audioTool.loadFile(file_name)
+        self.audioTool.produceWaveform()
+        self.canvas.draw()
 
     def exportPng(self):
         """
@@ -110,32 +163,17 @@ class UI(QMainWindow):
         Combines the selected audio file with the parameter options
         that the user has selected.
         """
-        self.canvas.figure.clear()
-        y, sr = librosa.load(self.fileName, sr=float (self.rateLineEdit.text()), mono=True)
-        self.ax = self.canvas.figure.subplots()
+        scale = self.scaleComboBox.currentText().lower()
+        scale = "log" if scale == "logarithmic" else scale
+        n_mels = int(self.dimensionLineEdit.text()) if scale == "mel" else 0
 
-        # Mel spectrograms are created differently in Librosa
-        if self.scaleComboBox.currentText().lower() == "mel":
-            s = librosa.feature.melspectrogram(y=y, sr=sr, n_mels=int(self.dimensionLineEdit.text()),
-                                               n_fft=int(self.fftLineEdit.text()),
-                                               hop_length=int(self.hopLineEdit.text()),
-                                               win_length=int(self.lengthLineEdit.text()),
-                                               window=self.windowingComboBox.currentText().lower())
-            s_db = librosa.power_to_db(numpy.abs(s), ref=numpy.max)
-        else:
-            s = librosa.stft(y,
-                             n_fft=int (self.fftLineEdit.text()),
-                             hop_length=int (self.hopLineEdit.text()),
-                             win_length=int (self.lengthLineEdit.text()),
-                             window=self.windowingComboBox.currentText().lower())
-            s_db = librosa.amplitude_to_db(numpy.abs(s), ref=numpy.max)
-
-        y_axis = self.scaleComboBox.currentText().lower()
-        y_axis = "log" if y_axis == "logarithmic" else y_axis
-        img = librosa.display.specshow(s_db, sr=sr, ax=self.ax, x_axis='time', y_axis=y_axis)
-
-        self.canvas.figure.colorbar(img, ax=self.ax)
-
+        self.audioTool.resample(int(self.rateLineEdit.text()))
+        self.audioTool.produceWaveform()
+        self.audioTool.produceSpectrogram(n_fft=int(self.fftLineEdit.text()),
+                                          hop_length=int(self.hopLineEdit.text()),
+                                          win_length=int(self.lengthLineEdit.text()),
+                                          window=self.windowingComboBox.currentText().lower(),
+                                          scale=scale, n_mels=n_mels)
         self.canvas.draw()
 
 app = QApplication(sys.argv)
