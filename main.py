@@ -11,6 +11,9 @@ from PyQt5.QtGui import *
 from PyQt5 import uic
 
 class UI(QMainWindow):
+    """
+    Defines the main window and all UI interactions.
+    """
     def __init__(self):
         super(UI, self).__init__()
 
@@ -26,14 +29,12 @@ class UI(QMainWindow):
 
         # Import relevant menu bar items
         self.fileName = ''
+        self.actionNew = self.findChild(QAction, 'actionNew')
         self.actionOpen = self.findChild(QAction, 'actionOpen')
-        self.actionOpen.triggered.connect(self.importFile)
         self.actionSavePng = self.findChild(QAction, 'actionSavePng')
+        self.actionNew.triggered.connect(self.reset)
+        self.actionOpen.triggered.connect(self.importFile)
         self.actionSavePng.triggered.connect(self.exportPng)
-        self.actionCopy = self.findChild(QAction, 'actionCopy')
-        self.actionSaveTxt = self.findChild(QAction, 'actionSaveTxt')
-        # self.actionExportGraph = self.findChild(QAction, 'actionExportGraph')
-        # self.actionExportParameters = self.findChild(QAction, 'actionExportParameters')
 
         # Import the parameter dropdown and allow it to toggle the frame on/off
         self.paramButton = self.findChild(QPushButton, 'paramButton')
@@ -69,15 +70,46 @@ class UI(QMainWindow):
         # Show the application window
         self.show()
 
+    def reset(self):
+        # Clear any saved sound file and generated plot
+        self.fileName = ''
+        self.canvas.figure.clear()
+        self.canvas.draw()
+        self.ax = None
+
+        # Configure all parameter fields to the default upon opening
+        self.rateLineEdit.setText('')
+        self.fftLineEdit.setText('')
+        self.hopLineEdit.setText('')
+        self.lengthLineEdit.setText('')
+        self.dimensionLineEdit.setText('')
+        self.windowingComboBox.setCurrentIndex(0)
+        self.scaleComboBox.setCurrentIndex(0)
+        self.dimensionLineEdit.setEnabled(True)
+
     def importFile(self):
+        """
+        Triggers upon clicking the 'Open' option on the menu bar.
+        Prompts the user to select a audio file to use from the file explorer.
+        """
         self.fileName = QFileDialog.getOpenFileName(self, 'Open audio file',
                                                      pathlib.Path().resolve().as_posix())[0]
 
     def exportPng(self):
+        """
+        Triggers upon clicking the 'Save as PNG' option on the menu bar.
+        Prompts the user to enter a file name on the file explorer, then saves
+        the current plot image to that file location.
+        """
         name = QFileDialog.getSaveFileName(self, 'Save file')
         self.canvas.figure.savefig(name[0])
 
     def generate(self):
+        """
+        Triggers upon clicking the 'Generate Spectrogram' button.
+        Combines the selected audio file with the parameter options
+        that the user has selected.
+        """
         self.canvas.figure.clear()
         y, sr = librosa.load(self.fileName, sr=float (self.rateLineEdit.text()), mono=True)
         self.ax = self.canvas.figure.subplots()
