@@ -116,13 +116,12 @@ class UI(QMainWindow):
         # Import the button that will create a spectrogram when clicked
         self.createButton = self.findChild(QPushButton, 'createButton')
         self.failLabel = self.findChild(QLabel, 'failLabel')
-        self.createButton.clicked.connect(self.generate)
+        self.createButton.clicked.connect(self.generateSpectrogram)
 
         # Show the application window
         self.show()
 
     def reset(self):
-        # Clear any saved sound file and generated plot
         self.canvas.figure.clear()
         self.canvas.draw()
         self.audioTool = AudioTool(self.canvas.figure)
@@ -141,12 +140,15 @@ class UI(QMainWindow):
         """
         Triggers upon clicking the 'Open' option on the menu bar.
         Prompts the user to select a audio file to use from the file explorer.
+        Then, load that file into Librosa and draw the waveform.
         """
         file_name = QFileDialog.getOpenFileName(self, 'Open audio file',
-                                                pathlib.Path().resolve().as_posix())[0]
-        self.audioTool.loadFile(file_name)
-        self.audioTool.produceWaveform()
-        self.canvas.draw()
+                                                pathlib.Path().resolve().as_posix(),
+                                                'Audio (*.wav *.mp3 *.flac)')[0]
+        if file_name:
+            self.audioTool.loadFile(file_name)
+            self.audioTool.produceWaveform()
+            self.canvas.draw()
 
     def exportPng(self):
         """
@@ -154,10 +156,12 @@ class UI(QMainWindow):
         Prompts the user to enter a file name on the file explorer, then saves
         the current plot image to that file location.
         """
-        name = QFileDialog.getSaveFileName(self, 'Save file')
-        self.canvas.figure.savefig(name[0])
+        name = QFileDialog.getSaveFileName(self, 'Save file',
+                                           pathlib.Path().resolve().as_posix(),
+                                           'PNG File (*.png)')
+        self.canvas.figure.savefig(name[0], format='png')
 
-    def generate(self):
+    def generateSpectrogram(self):
         """
         Triggers upon clicking the 'Generate Spectrogram' button.
         Combines the selected audio file with the parameter options

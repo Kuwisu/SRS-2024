@@ -19,7 +19,7 @@
      <rect>
       <x>0</x>
       <y>0</y>
-      <width>871</width>
+      <width>951</width>
       <height>561</height>
      </rect>
     </property>
@@ -36,9 +36,9 @@
     </property>
     <property name="geometry">
      <rect>
-      <x>620</x>
+      <x>630</x>
       <y>10</y>
-      <width>211</width>
+      <width>221</width>
       <height>241</height>
      </rect>
     </property>
@@ -53,7 +53,7 @@
       <rect>
        <x>0</x>
        <y>0</y>
-       <width>211</width>
+       <width>221</width>
        <height>23</height>
       </rect>
      </property>
@@ -66,7 +66,7 @@
       <rect>
        <x>0</x>
        <y>20</y>
-       <width>211</width>
+       <width>241</width>
        <height>221</height>
       </rect>
      </property>
@@ -76,9 +76,9 @@
      <widget class="QWidget" name="formLayoutWidget">
       <property name="geometry">
        <rect>
-        <x>10</x>
+        <x>0</x>
         <y>0</y>
-        <width>191</width>
+        <width>221</width>
         <height>181</height>
        </rect>
       </property>
@@ -86,7 +86,7 @@
        <item row="0" column="0">
         <widget class="QLabel" name="rateLabel">
          <property name="text">
-          <string>Sampling Rate</string>
+          <string>Sampling Rate (Hz)</string>
          </property>
         </widget>
        </item>
@@ -96,7 +96,7 @@
        <item row="1" column="0">
         <widget class="QLabel" name="fftLabel">
          <property name="text">
-          <string>FFT Size</string>
+          <string>FFT Size (samples)</string>
          </property>
         </widget>
        </item>
@@ -106,7 +106,7 @@
        <item row="2" column="0">
         <widget class="QLabel" name="hopLabel">
          <property name="text">
-          <string>Hop Size</string>
+          <string>Hop Size (samples)</string>
          </property>
         </widget>
        </item>
@@ -116,7 +116,7 @@
        <item row="3" column="0">
         <widget class="QLabel" name="lengthLabel">
          <property name="text">
-          <string>Window Length</string>
+          <string>Window Length (samples)</string>
          </property>
         </widget>
        </item>
@@ -190,7 +190,7 @@
      <widget class="QPushButton" name="createButton">
       <property name="geometry">
        <rect>
-        <x>30</x>
+        <x>40</x>
         <y>190</y>
         <width>141</width>
         <height>23</height>
