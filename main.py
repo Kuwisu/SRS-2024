@@ -32,18 +32,29 @@ class AudioTool:
         self.figure = figure
         self.fileName = ''
         self.y = None
+        self.orig_sr = None
         self.sr = None
         self.colorbar = None
         self.ax = self.figure.subplots(nrows=2, sharex=True)
 
+    def getFileName(self):
+        return self.fileName.split('/')[-1]
+
+    def getOriginalSampleRate(self):
+        return self.orig_sr
+
+    def getCurrentSampleRate(self):
+        return self.sr
+
     def loadFile(self, file_name):
         self.fileName = file_name
-        self.y, self.sr = librosa.load(self.fileName, mono=True)
+        self.y, self.orig_sr = librosa.load(self.fileName, mono=True)
+        self.sr = self.orig_sr
 
     def produceWaveform(self):
         self.ax[0].cla()
         librosa.display.waveshow(self.y, sr=self.sr, ax=self.ax[0])
-        self.ax[0].set_title(f"Waveform of {self.fileName.split('/')[-1]} at {self.sr}Hz")
+        self.ax[0].set_title(f"Waveform of {self.getFileName()} at {self.sr}Hz")
         self.ax[0].label_outer()
 
     def produceSpectrogram(self, n_fft, hop_length, win_length, window, scale, n_mels):
@@ -113,17 +124,19 @@ class UI(QMainWindow):
         self.specForm = QFormLayout()
         self.specFormFrame.setLayout(self.specForm)
         self.gridLayout.addWidget(self.specFormFrame, 0, 1, 1, 1, alignment=Qt.AlignJustify)
+        self.gridLayout.addWidget(QWidget().setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Expanding), 1, 1, 1, 1)
+
+        # Create the menu for waveform parameters
+        self.waveFormFrame = QFrame(self.centralWidget)
+        self.waveFormFrame.setAutoFillBackground(True)
+        self.waveFormFrame.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
+        self.waveForm = QFormLayout()
+        self.waveFormFrame.setLayout(self.waveForm)
+        self.gridLayout.addWidget(self.waveFormFrame, 0, 0, 1, 1, alignment=Qt.AlignJustify)
         self.gridLayout.addWidget(QWidget().setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Expanding), 1, 0, 1, 1)
 
-        # # Create the menu for waveform parameters
-        # self.waveFormFrame = QFrame(self.centralWidget)
-        # self.waveFormFrame.setAutoFillBackground(True)
-        # self.waveFormFrame.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
-        # self.waveForm = QFormLayout()
-        # self.waveFormFrame.setLayout(self.waveForm)
-        # self.gridLayout.addWidget(self.waveFormFrame, 0, 0, 1, 1, alignment=Qt.AlignTop)
-
         # Create the text entries for parameters
+        self.rateLineEdit = QLineEdit()
         self.fftLineEdit = QLineEdit()
         self.hopLineEdit = QLineEdit()
         self.lengthLineEdit = QLineEdit()
@@ -150,9 +163,30 @@ class UI(QMainWindow):
         self.lengthLineEdit.setValidator(QIntValidator())
         self.melLineEdit.setValidator(QIntValidator())
 
+        # Create the button that will adjust the waveform when clicked
+        self.resampleButton = QPushButton('Resample')
+        self.resampleButton.clicked.connect(self.resampleWaveform)
+
         # Create the button that will create a spectrogram when clicked
         self.specGenerateButton = QPushButton('Generate Spectrogram')
         self.specGenerateButton.clicked.connect(self.generateSpectrogram)
+
+        # Create a button that will allow the user to input an audio file
+        # and the labels that it will adjust
+        self.audioChooseButton = QPushButton('Select Audio File')
+        self.audioChooseButton.clicked.connect(self.importFile)
+        self.audioLabel = QLabel('No file selected')
+        self.audioLabel.setAlignment(Qt.AlignCenter)
+        self.origRateLabel = QLabel('')
+        self.currentRateLabel = QLabel('')
+
+        # Create the rows to go into the waveform form
+        self.waveForm.addRow(self.audioChooseButton)
+        self.waveForm.addRow(self.audioLabel)
+        self.waveForm.addRow(self.origRateLabel)
+        self.waveForm.addRow(self.currentRateLabel)
+        self.waveForm.addRow(QLabel('New Sampling Rate (Hz)'), self.rateLineEdit)
+        self.waveForm.addRow(self.resampleButton)
 
         # Create the rows to go into the spectrogram form
         self.specForm.addRow(QLabel("FFT Size (samples)"), self.fftLineEdit)
@@ -162,6 +196,11 @@ class UI(QMainWindow):
         self.specForm.addRow(QLabel("Scale"), self.scaleComboBox)
         self.specForm.addRow(QLabel("Mel Bands"), self.melLineEdit)
         self.specForm.addRow(self.specGenerateButton)
+
+        # Load the waveform entry button and allow it to toggle the form
+        self.waveButton = self.findChild(QPushButton, 'waveButton')
+        self.waveButton.clicked.connect(
+            lambda: self.waveFormFrame.setVisible(not self.waveFormFrame.isVisible()))
 
         # Load the parameter entry button and allow it to toggle the form
         self.specButton = self.findChild(QPushButton, 'specButton')
@@ -195,9 +234,12 @@ class UI(QMainWindow):
                                                 pathlib.Path().resolve().as_posix(),
                                                 'Audio (*.wav *.mp3 *.flac)')[0]
         if file_name:
+            # self.reset()
             self.audioTool.loadFile(file_name)
             self.audioTool.produceWaveform()
             self.canvas.draw()
+
+            self.audioLabel.setText(f"{self.audioTool.getFileName()} selected")
 
     def exportPng(self):
         """
@@ -209,6 +251,12 @@ class UI(QMainWindow):
                                            pathlib.Path().resolve().as_posix(),
                                            'PNG File (*.png)')
         self.canvas.figure.savefig(name[0], format='png')
+
+    def resampleWaveform(self):
+        self.audioTool.resample(int(self.rateLineEdit.text()))
+        self.audioTool.produceWaveform()
+        self.generateSpectrogram()
+        self.canvas.draw()
 
     def generateSpectrogram(self):
         """
