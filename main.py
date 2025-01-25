@@ -58,7 +58,11 @@ class AudioTool:
                              win_length=win_length, window=window)
             s_db = librosa.power_to_db(numpy.abs(s), ref=numpy.max)
 
-        img = librosa.display.specshow(s_db, sr=self.sr, ax=self.ax[1], x_axis='time', y_axis=scale)
+        img = librosa.display.specshow(s_db, sr=self.sr, n_fft=n_fft,
+                                       win_length=win_length, hop_length=hop_length,
+                                       ax=self.ax[1], x_axis='time', y_axis=scale)
+        if self.colorbar is None:
+            self.colorbar = self.figure.colorbar(img, ax=self.ax[1], format="%+2.f dB")
 
         self.ax[1].set_title(f'{scale} spectrogram with {win_length} window length')
         self.ax[1].label_outer()
