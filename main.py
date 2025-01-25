@@ -27,6 +27,29 @@ SPEC_SCALES = {0: ("Mel", 'mel'),
                1: ("Linear", 'linear'),
                2: ("Logarithmic", 'log')}
 
+class TabWidget(QTabWidget):
+    """
+    Override the sizing method that the tab widget uses.
+
+    This code has been derived from user musicamante's implementation
+    Link: https://stackoverflow.com/a/66053591
+    """
+    def __init__(self, *args, **kwargs):
+        super(TabWidget, self).__init__(**kwargs)
+        self.currentChanged.connect(self.updateGeometry)
+
+    def minimumSizeHint(self):
+        return self.sizeHint()
+
+    def sizeHint(self):
+        widget_size = self.currentWidget().sizeHint()
+        tab_size = self.tabBar().sizeHint()
+        size = QSize(
+            max(widget_size.width(), tab_size.width()),
+            widget_size.height() + tab_size.height()
+        )
+        return size
+
 class AudioTool:
     def __init__(self, figure):
         self.figure = figure
@@ -194,7 +217,7 @@ class UI(QMainWindow):
         self.specForm.addRow(self.specGenerateButton)
 
         # Create the tab menu to edit settings
-        self.tabWidget = QTabWidget()
+        self.tabWidget = TabWidget()
         self.tabWidget.addTab(self.waveFormFrame, "Sound Settings")
         self.tabWidget.addTab(self.specFormFrame, "Spectrogram Settings")
         self.tabWidget.addTab(QWidget(), "Hide")
