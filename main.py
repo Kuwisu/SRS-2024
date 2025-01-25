@@ -232,13 +232,6 @@ class UI(QMainWindow):
         self.gridLayout.addWidget(QWidget().setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding), 1, 0, 1, 1)
         self.gridLayout.addWidget(QWidget().setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding), 0, 1, 1, 2)
 
-        # Save the tab sizes to a dictionary to switch
-        # tabHeight = self.tabWidget.tabBar().size().height()
-        # waveSize = QSize(self.tabWidget.sizeHint().width(), self.waveFormFrame.sizeHint().height() + tabHeight)
-        # specSize = QSize(self.tabWidget.sizeHint().width(), self.specFormFrame.sizeHint().height() + tabHeight)
-        # hideSize = QSize(self.tabWidget.sizeHint().width(), tabHeight)
-        # self.tabSizeDict = {0: waveSize, 1: specSize, 2: hideSize}
-
         # Show the application window
         self.adjustSize()
         self.show()
