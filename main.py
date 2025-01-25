@@ -7,6 +7,7 @@ import numpy
 import pathlib
 import sys
 
+from PyQt5.QtCore import Qt, QSize
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
 from PyQt5.QtWidgets import *
 from PyQt5.QtGui import *
@@ -26,23 +27,57 @@ SPEC_SCALES = {0: ("Mel", 'mel'),
                1: ("Linear", 'linear'),
                2: ("Logarithmic", 'log')}
 
+class TabWidget(QTabWidget):
+    """
+    Override the sizing method that the tab widget uses.
+
+    This code has been derived from user musicamante's implementation
+    Link: https://stackoverflow.com/a/66053591
+    """
+    def __init__(self, *args, **kwargs):
+        super(TabWidget, self).__init__(**kwargs)
+        self.currentChanged.connect(self.updateGeometry)
+
+    def minimumSizeHint(self):
+        return self.sizeHint()
+
+    def sizeHint(self):
+        widget_size = self.currentWidget().sizeHint()
+        tab_size = self.tabBar().sizeHint()
+        size = QSize(
+            max(widget_size.width(), tab_size.width()),
+            widget_size.height() + tab_size.height()
+        )
+        return size
+
 class AudioTool:
     def __init__(self, figure):
         self.figure = figure
         self.fileName = ''
         self.y = None
+        self.orig_sr = None
         self.sr = None
         self.colorbar = None
         self.ax = self.figure.subplots(nrows=2, sharex=True)
 
+    def getFileName(self):
+        return self.fileName.split('/')[-1]
+
+    def getOriginalSampleRate(self):
+        return self.orig_sr
+
+    def getCurrentSampleRate(self):
+        return self.sr
+
     def loadFile(self, file_name):
         self.fileName = file_name
-        self.y, self.sr = librosa.load(self.fileName, mono=True)
+        self.y, self.orig_sr = librosa.load(self.fileName, mono=True)
+        self.sr = self.orig_sr
 
     def produceWaveform(self):
         self.ax[0].cla()
         librosa.display.waveshow(self.y, sr=self.sr, ax=self.ax[0])
-        self.ax[0].set_title(f"Waveform of {self.fileName.split('/')[-1]} at {self.sr}Hz")
+        self.ax[0].set_title(f"Waveform of {self.getFileName()} at {self.sr}Hz")
         self.ax[0].label_outer()
 
     def produceSpectrogram(self, n_fft, hop_length, win_length, window, scale, n_mels):
@@ -82,19 +117,11 @@ class UI(QMainWindow):
     def __init__(self):
         super(UI, self).__init__()
 
-        # Load the UI file
-        uic.loadUi('spec-shower-ui.ui', self)
+        # Load the UI file and load the center widget
+        uic.loadUi('ui-25-01.ui', self)
+        self.centralWidget = self.findChild(QWidget, 'centralWidget')
 
-        # Import and prepare the spectrogram display frame
-        self.specFrame = self.findChild(QFrame, 'specFrame')
-        self.specFrame.setLayout(QVBoxLayout())
-        self.canvas = FigureCanvasQTAgg(plt.Figure(layout='constrained'))
-        self.specFrame.layout().addWidget(self.canvas)
-
-        # Prepare the tool that will interact with the display canvas
-        self.audioTool = AudioTool(self.canvas.figure)
-
-        # Import relevant menu bar items
+        # Load all the menu bar items
         self.actionNew = self.findChild(QAction, 'actionNew')
         self.actionOpen = self.findChild(QAction, 'actionOpen')
         self.actionSavePng = self.findChild(QAction, 'actionSavePng')
@@ -102,48 +129,111 @@ class UI(QMainWindow):
         self.actionOpen.triggered.connect(self.importFile)
         self.actionSavePng.triggered.connect(self.exportPng)
 
-        # Import the parameter dropdown and allow it to toggle the frame on/off
-        self.paramButton = self.findChild(QPushButton, 'paramButton')
-        self.paramEditFrame = self.findChild(QFrame, 'paramEditFrame')
-        self.paramButton.clicked.connect(
-            lambda: self.paramEditFrame.setVisible(
-                not self.paramEditFrame.isVisible()))
+        # Load the grid and change the frame to occupy 2*3 cells rather than 1*1
+        self.gridLayout = self.findChild(QGridLayout, 'gridLayout')
+        self.specFrame = self.findChild(QFrame, 'specFrame')
+        self.gridLayout.addWidget(self.specFrame, 0, 0, 2, 3)
 
-        # Import the parameter text entries
-        self.rateLineEdit = self.findChild(QLineEdit, 'rateLineEdit')
-        self.fftLineEdit = self.findChild(QLineEdit, 'fftLineEdit')
-        self.hopLineEdit = self.findChild(QLineEdit, 'hopLineEdit')
-        self.lengthLineEdit = self.findChild(QLineEdit, 'lengthLineEdit')
-        self.dimensionLineEdit = self.findChild(QLineEdit, 'dimensionLineEdit')
+        # Prepare the display canvas and tool that interacts with it
+        self.specFrame.setLayout(QVBoxLayout())
+        self.canvas = FigureCanvasQTAgg(plt.Figure(layout='constrained'))
+        self.specFrame.layout().addWidget(self.canvas)
+        self.audioTool = AudioTool(self.canvas.figure)
+
+        # Create the menu for spectrogram parameters
+        self.specFormFrame = QFrame(self.centralWidget)
+        self.specFormFrame.setAutoFillBackground(True)
+        self.specFormFrame.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
+        self.specForm = QFormLayout()
+        self.specFormFrame.setLayout(self.specForm)
+
+        # Create the menu for waveform parameters
+        self.waveFormFrame = QFrame(self.centralWidget)
+        self.waveFormFrame.setAutoFillBackground(True)
+        self.waveFormFrame.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
+        self.waveForm = QFormLayout()
+        self.waveFormFrame.setLayout(self.waveForm)
+
+        # Create the text entries for parameters
+        self.rateLineEdit = QLineEdit()
+        self.fftLineEdit = QLineEdit()
+        self.hopLineEdit = QLineEdit()
+        self.lengthLineEdit = QLineEdit()
+        self.melLineEdit = QLineEdit()
 
         # Fill out the window function combobox
-        self.windowingComboBox = self.findChild(QComboBox, 'windowingComboBox')
+        self.windowingComboBox = QComboBox()
         for index, window in WINDOW_FUNCTIONS.items():
             self.windowingComboBox.addItem(window[0])
         self.windowingComboBox.setCurrentIndex(0)
 
-        # Fill out the scale combo box and bind the mel bands field to only
-        # display when it is a Mel spectrogram.
-        self.scaleComboBox = self.findChild(QComboBox, 'scaleComboBox')
+        # Fill out the scale combobox and bind the mel bands field to only
+        # be writeable when it is a Mel spectrogram.
+        self.scaleComboBox = QComboBox()
         for index, scale in SPEC_SCALES.items():
             self.scaleComboBox.addItem(scale[0])
         self.scaleComboBox.setCurrentIndex(0)
         self.scaleComboBox.activated[str].connect(
-            lambda text: self.dimensionLineEdit.setEnabled(text == "Mel"))
+            lambda text: self.melLineEdit.setEnabled(text == "Mel"))
 
         # Configure the text fields to only allow numbers
-        self.rateLineEdit.setValidator(QDoubleValidator())
         self.fftLineEdit.setValidator(QIntValidator())
         self.hopLineEdit.setValidator(QIntValidator())
         self.lengthLineEdit.setValidator(QIntValidator())
-        self.dimensionLineEdit.setValidator(QIntValidator())
+        self.melLineEdit.setValidator(QIntValidator())
 
-        # Import the button that will create a spectrogram when clicked
-        self.createButton = self.findChild(QPushButton, 'createButton')
-        self.failLabel = self.findChild(QLabel, 'failLabel')
-        self.createButton.clicked.connect(self.generateSpectrogram)
+        # Create the button that will adjust the waveform when clicked
+        self.resampleButton = QPushButton('Resample')
+        self.resampleButton.clicked.connect(self.resampleWaveform)
+
+        # Create the button that will create a spectrogram when clicked
+        self.specGenerateButton = QPushButton('Generate Spectrogram')
+        self.specGenerateButton.clicked.connect(self.generateSpectrogram)
+
+        # Create a button that will allow the user to input an audio file
+        # and the labels that it will adjust
+        self.audioChooseButton = QPushButton('Select Audio File')
+        self.audioChooseButton.clicked.connect(self.importFile)
+        self.audioLabel = QLabel('No file selected')
+        self.audioLabel.setAlignment(Qt.AlignCenter)
+        self.origRateLabel = QLabel('')
+        self.currentRateLabel = QLabel('')
+        alert_label = QLabel('This will affect existing spectrograms')
+        alert_label.setAlignment(Qt.AlignCenter)
+
+        # Create the rows to go into the waveform form
+        self.waveForm.addRow(self.audioChooseButton)
+        self.waveForm.addRow(self.audioLabel)
+        self.waveForm.addRow(self.origRateLabel)
+        self.waveForm.addRow(self.currentRateLabel)
+        self.waveForm.addRow(QLabel('New Sampling Rate (Hz)'), self.rateLineEdit)
+        self.waveForm.addRow(self.resampleButton)
+        self.waveForm.addRow(alert_label)
+
+        # Create the rows to go into the spectrogram form
+        self.specForm.addRow(QLabel("FFT Size (samples)"), self.fftLineEdit)
+        self.specForm.addRow(QLabel("Hop Size (samples)"), self.hopLineEdit)
+        self.specForm.addRow(QLabel("Window Length (samples)"), self.lengthLineEdit)
+        self.specForm.addRow(QLabel("Windowing Function"), self.windowingComboBox)
+        self.specForm.addRow(QLabel("Scale"), self.scaleComboBox)
+        self.specForm.addRow(QLabel("Mel Bands"), self.melLineEdit)
+        self.specForm.addRow(self.specGenerateButton)
+
+        # Create the tab menu to edit settings
+        self.tabWidget = TabWidget()
+        self.tabWidget.addTab(self.waveFormFrame, "Sound Settings")
+        self.tabWidget.addTab(self.specFormFrame, "Spectrogram Settings")
+        self.tabWidget.addTab(QWidget(), "Hide")
+        self.tabWidget.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
+        self.tabWidget.currentChanged.connect(self.adjustSize)
+
+        # Add the tab widget to the grid and create padding around it.
+        self.gridLayout.addWidget(self.tabWidget, 0, 0, 1, 1)
+        self.gridLayout.addWidget(QWidget().setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding), 1, 0, 1, 1)
+        self.gridLayout.addWidget(QWidget().setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding), 0, 1, 1, 2)
 
         # Show the application window
+        self.adjustSize()
         self.show()
 
     def reset(self):
@@ -152,14 +242,13 @@ class UI(QMainWindow):
         self.audioTool = AudioTool(self.canvas.figure)
 
         # Configure all parameter fields to the default upon opening
-        self.rateLineEdit.setText('')
         self.fftLineEdit.setText('')
         self.hopLineEdit.setText('')
         self.lengthLineEdit.setText('')
-        self.dimensionLineEdit.setText('')
+        self.melLineEdit.setText('')
         self.windowingComboBox.setCurrentIndex(0)
         self.scaleComboBox.setCurrentIndex(0)
-        self.dimensionLineEdit.setEnabled(True)
+        self.melLineEdit.setEnabled(True)
 
     def importFile(self):
         """
@@ -171,9 +260,14 @@ class UI(QMainWindow):
                                                 pathlib.Path().resolve().as_posix(),
                                                 'Audio (*.wav *.mp3 *.flac)')[0]
         if file_name:
+            # self.reset()
             self.audioTool.loadFile(file_name)
             self.audioTool.produceWaveform()
             self.canvas.draw()
+
+            self.audioLabel.setText(f"{self.audioTool.getFileName()} selected")
+            self.origRateLabel.setText(f"Original Sampling Rate: {self.audioTool.getOriginalSampleRate()}Hz")
+            self.currentRateLabel.setText(f"Current Sampling Rate: {self.audioTool.getCurrentSampleRate()}Hz")
 
     def exportPng(self):
         """
@@ -186,6 +280,13 @@ class UI(QMainWindow):
                                            'PNG File (*.png)')
         self.canvas.figure.savefig(name[0], format='png')
 
+    def resampleWaveform(self):
+        self.audioTool.resample(int(self.rateLineEdit.text()))
+        self.audioTool.produceWaveform()
+        self.currentRateLabel.setText(f"Current Sampling Rate: {self.audioTool.getCurrentSampleRate()}Hz")
+        self.generateSpectrogram()
+        self.canvas.draw()
+
     def generateSpectrogram(self):
         """
         Triggers upon clicking the 'Generate Spectrogram' button.
@@ -195,11 +296,8 @@ class UI(QMainWindow):
         # Extract the correct term from the combo boxes
         scale = SPEC_SCALES.get(self.scaleComboBox.currentIndex())[1]
         window = WINDOW_FUNCTIONS.get(self.windowingComboBox.currentIndex())[1]
-        n_mels = int(self.dimensionLineEdit.text()) if scale == 'mel' else 0
+        n_mels = int(self.melLineEdit.text()) if scale == 'mel' else 0
 
-        # Repair the waveform according to the new sampling rate
-        self.audioTool.resample(int(self.rateLineEdit.text()))
-        self.audioTool.produceWaveform()
         # Create the spectrogram
         self.audioTool.produceSpectrogram(n_fft=int(self.fftLineEdit.text()),
                                           hop_length=int(self.hopLineEdit.text()),
