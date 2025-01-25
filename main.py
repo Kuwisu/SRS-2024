@@ -7,6 +7,7 @@ import numpy
 import pathlib
 import sys
 
+from PyQt5.QtCore import Qt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
 from PyQt5.QtWidgets import *
 from PyQt5.QtGui import *
@@ -82,19 +83,11 @@ class UI(QMainWindow):
     def __init__(self):
         super(UI, self).__init__()
 
-        # Load the UI file
-        uic.loadUi('spec-shower-ui.ui', self)
+        # Load the UI file and load the center widget
+        uic.loadUi('ui-25-01.ui', self)
+        self.centralWidget = self.findChild(QWidget, 'centralWidget')
 
-        # Import and prepare the spectrogram display frame
-        self.specFrame = self.findChild(QFrame, 'specFrame')
-        self.specFrame.setLayout(QVBoxLayout())
-        self.canvas = FigureCanvasQTAgg(plt.Figure(layout='constrained'))
-        self.specFrame.layout().addWidget(self.canvas)
-
-        # Prepare the tool that will interact with the display canvas
-        self.audioTool = AudioTool(self.canvas.figure)
-
-        # Import relevant menu bar items
+        # Load all the menu bar items
         self.actionNew = self.findChild(QAction, 'actionNew')
         self.actionOpen = self.findChild(QAction, 'actionOpen')
         self.actionSavePng = self.findChild(QAction, 'actionSavePng')
@@ -102,46 +95,78 @@ class UI(QMainWindow):
         self.actionOpen.triggered.connect(self.importFile)
         self.actionSavePng.triggered.connect(self.exportPng)
 
-        # Import the parameter dropdown and allow it to toggle the frame on/off
-        self.paramButton = self.findChild(QPushButton, 'paramButton')
-        self.paramEditFrame = self.findChild(QFrame, 'paramEditFrame')
-        self.paramButton.clicked.connect(
-            lambda: self.paramEditFrame.setVisible(
-                not self.paramEditFrame.isVisible()))
+        # Load the grid and change the frame to occupy 2*3 cells rather than 1*1
+        self.gridLayout = self.findChild(QGridLayout, 'gridLayout')
+        self.specFrame = self.findChild(QFrame, 'specFrame')
+        self.gridLayout.addWidget(self.specFrame, 0, 0, 2, 3)
 
-        # Import the parameter text entries
-        self.rateLineEdit = self.findChild(QLineEdit, 'rateLineEdit')
-        self.fftLineEdit = self.findChild(QLineEdit, 'fftLineEdit')
-        self.hopLineEdit = self.findChild(QLineEdit, 'hopLineEdit')
-        self.lengthLineEdit = self.findChild(QLineEdit, 'lengthLineEdit')
-        self.dimensionLineEdit = self.findChild(QLineEdit, 'dimensionLineEdit')
+        # Prepare the display canvas and tool that interacts with it
+        self.specFrame.setLayout(QVBoxLayout())
+        self.canvas = FigureCanvasQTAgg(plt.Figure(layout='constrained'))
+        self.specFrame.layout().addWidget(self.canvas)
+        self.audioTool = AudioTool(self.canvas.figure)
+
+        # Create the menu for spectrogram parameters
+        self.specFormFrame = QFrame(self.centralWidget)
+        self.specFormFrame.setAutoFillBackground(True)
+        self.specFormFrame.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
+        self.specForm = QFormLayout()
+        self.specFormFrame.setLayout(self.specForm)
+        self.gridLayout.addWidget(self.specFormFrame, 0, 1, 1, 1, alignment=Qt.AlignJustify)
+        self.gridLayout.addWidget(QWidget().setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Expanding), 1, 0, 1, 1)
+
+        # # Create the menu for waveform parameters
+        # self.waveFormFrame = QFrame(self.centralWidget)
+        # self.waveFormFrame.setAutoFillBackground(True)
+        # self.waveFormFrame.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
+        # self.waveForm = QFormLayout()
+        # self.waveFormFrame.setLayout(self.waveForm)
+        # self.gridLayout.addWidget(self.waveFormFrame, 0, 0, 1, 1, alignment=Qt.AlignTop)
+
+        # Create the text entries for parameters
+        self.fftLineEdit = QLineEdit()
+        self.hopLineEdit = QLineEdit()
+        self.lengthLineEdit = QLineEdit()
+        self.melLineEdit = QLineEdit()
 
         # Fill out the window function combobox
-        self.windowingComboBox = self.findChild(QComboBox, 'windowingComboBox')
+        self.windowingComboBox = QComboBox()
         for index, window in WINDOW_FUNCTIONS.items():
             self.windowingComboBox.addItem(window[0])
         self.windowingComboBox.setCurrentIndex(0)
 
-        # Fill out the scale combo box and bind the mel bands field to only
-        # display when it is a Mel spectrogram.
-        self.scaleComboBox = self.findChild(QComboBox, 'scaleComboBox')
+        # Fill out the scale combobox and bind the mel bands field to only
+        # be writeable when it is a Mel spectrogram.
+        self.scaleComboBox = QComboBox()
         for index, scale in SPEC_SCALES.items():
             self.scaleComboBox.addItem(scale[0])
         self.scaleComboBox.setCurrentIndex(0)
         self.scaleComboBox.activated[str].connect(
-            lambda text: self.dimensionLineEdit.setEnabled(text == "Mel"))
+            lambda text: self.melLineEdit.setEnabled(text == "Mel"))
 
         # Configure the text fields to only allow numbers
-        self.rateLineEdit.setValidator(QDoubleValidator())
         self.fftLineEdit.setValidator(QIntValidator())
         self.hopLineEdit.setValidator(QIntValidator())
         self.lengthLineEdit.setValidator(QIntValidator())
-        self.dimensionLineEdit.setValidator(QIntValidator())
+        self.melLineEdit.setValidator(QIntValidator())
 
-        # Import the button that will create a spectrogram when clicked
-        self.createButton = self.findChild(QPushButton, 'createButton')
-        self.failLabel = self.findChild(QLabel, 'failLabel')
-        self.createButton.clicked.connect(self.generateSpectrogram)
+        # Create the button that will create a spectrogram when clicked
+        self.specGenerateButton = QPushButton('Generate Spectrogram')
+        self.specGenerateButton.clicked.connect(self.generateSpectrogram)
+
+        # Create the rows to go into the spectrogram form
+        self.specForm.addRow(QLabel("FFT Size (samples)"), self.fftLineEdit)
+        self.specForm.addRow(QLabel("Hop Size (samples)"), self.hopLineEdit)
+        self.specForm.addRow(QLabel("Window Length (samples)"), self.lengthLineEdit)
+        self.specForm.addRow(QLabel("Windowing Function"), self.windowingComboBox)
+        self.specForm.addRow(QLabel("Scale"), self.scaleComboBox)
+        self.specForm.addRow(QLabel("Mel Bands"), self.melLineEdit)
+        self.specForm.addRow(self.specGenerateButton)
+
+        # Load the parameter entry button and allow it to toggle the form
+        self.specButton = self.findChild(QPushButton, 'specButton')
+        self.specButton.clicked.connect(
+            lambda: self.specFormFrame.setVisible(not self.specFormFrame.isVisible()))
 
         # Show the application window
         self.show()
@@ -152,14 +177,13 @@ class UI(QMainWindow):
         self.audioTool = AudioTool(self.canvas.figure)
 
         # Configure all parameter fields to the default upon opening
-        self.rateLineEdit.setText('')
         self.fftLineEdit.setText('')
         self.hopLineEdit.setText('')
         self.lengthLineEdit.setText('')
-        self.dimensionLineEdit.setText('')
+        self.melLineEdit.setText('')
         self.windowingComboBox.setCurrentIndex(0)
         self.scaleComboBox.setCurrentIndex(0)
-        self.dimensionLineEdit.setEnabled(True)
+        self.melLineEdit.setEnabled(True)
 
     def importFile(self):
         """
@@ -195,11 +219,8 @@ class UI(QMainWindow):
         # Extract the correct term from the combo boxes
         scale = SPEC_SCALES.get(self.scaleComboBox.currentIndex())[1]
         window = WINDOW_FUNCTIONS.get(self.windowingComboBox.currentIndex())[1]
-        n_mels = int(self.dimensionLineEdit.text()) if scale == 'mel' else 0
+        n_mels = int(self.melLineEdit.text()) if scale == 'mel' else 0
 
-        # Repair the waveform according to the new sampling rate
-        self.audioTool.resample(int(self.rateLineEdit.text()))
-        self.audioTool.produceWaveform()
         # Create the spectrogram
         self.audioTool.produceSpectrogram(n_fft=int(self.fftLineEdit.text()),
                                           hop_length=int(self.hopLineEdit.text()),
