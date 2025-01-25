@@ -12,6 +12,20 @@ from PyQt5.QtWidgets import *
 from PyQt5.QtGui import *
 from PyQt5 import uic
 
+# Map the indices of the combo boxes to a tuple consisting of the string that
+# is displayed to the user, and the name that will be used by Librosa.
+WINDOW_FUNCTIONS = {0: ("Hanning", 'hann'),
+                    1: ("Hamming", 'hamming'),
+                    2: ("Blackman", 'blackman'),
+                    3: ("Blackman-Harris", 'blackmanharris'),
+                    4: ("Flat Top", 'flattop'),
+                    5: ("Parzen", 'parzen'),
+                    6: ("Triangular", 'triang'),
+                    7: ("Rectangular", 'boxcar')}
+SPEC_SCALES = {0: ("Mel", 'mel'),
+               1: ("Linear", 'linear'),
+               2: ("Logarithmic", 'log')}
+
 class AudioTool:
     def __init__(self, figure):
         self.figure = figure
@@ -45,10 +59,7 @@ class AudioTool:
             s_db = librosa.power_to_db(numpy.abs(s), ref=numpy.max)
 
         img = librosa.display.specshow(s_db, sr=self.sr, ax=self.ax[1], x_axis='time', y_axis=scale)
-        if self.colorbar is None:
-            self.colorbar = self.figure.colorbar(img, ax=self.ax[1], format="%+2.f dB")
 
-        # times = librosa.frames_to_time(numpy.arange(s_db.shape[1]), sr=self.sr, hop_length=hop_length)
         self.ax[1].set_title(f'{scale} spectrogram with {win_length} window length')
         self.ax[1].label_outer()
 
@@ -94,15 +105,25 @@ class UI(QMainWindow):
             lambda: self.paramEditFrame.setVisible(
                 not self.paramEditFrame.isVisible()))
 
-        # Import the parameter fields
+        # Import the parameter text entries
         self.rateLineEdit = self.findChild(QLineEdit, 'rateLineEdit')
         self.fftLineEdit = self.findChild(QLineEdit, 'fftLineEdit')
         self.hopLineEdit = self.findChild(QLineEdit, 'hopLineEdit')
         self.lengthLineEdit = self.findChild(QLineEdit, 'lengthLineEdit')
-        self.windowingComboBox = self.findChild(QComboBox, 'windowingComboBox')
-        # The mel bands field is only enabled when creating a mel spectrogram
-        self.scaleComboBox = self.findChild(QComboBox, 'scaleComboBox')
         self.dimensionLineEdit = self.findChild(QLineEdit, 'dimensionLineEdit')
+
+        # Fill out the window function combobox
+        self.windowingComboBox = self.findChild(QComboBox, 'windowingComboBox')
+        for index, window in WINDOW_FUNCTIONS.items():
+            self.windowingComboBox.addItem(window[0])
+        self.windowingComboBox.setCurrentIndex(0)
+
+        # Fill out the scale combo box and bind the mel bands field to only
+        # display when it is a Mel spectrogram.
+        self.scaleComboBox = self.findChild(QComboBox, 'scaleComboBox')
+        for index, scale in SPEC_SCALES.items():
+            self.scaleComboBox.addItem(scale[0])
+        self.scaleComboBox.setCurrentIndex(0)
         self.scaleComboBox.activated[str].connect(
             lambda text: self.dimensionLineEdit.setEnabled(text == "Mel"))
 
@@ -167,17 +188,19 @@ class UI(QMainWindow):
         Combines the selected audio file with the parameter options
         that the user has selected.
         """
-        scale = self.scaleComboBox.currentText().lower()
-        scale = "log" if scale == "logarithmic" else scale
-        n_mels = int(self.dimensionLineEdit.text()) if scale == "mel" else 0
+        # Extract the correct term from the combo boxes
+        scale = SPEC_SCALES.get(self.scaleComboBox.currentIndex())[1]
+        window = WINDOW_FUNCTIONS.get(self.windowingComboBox.currentIndex())[1]
+        n_mels = int(self.dimensionLineEdit.text()) if scale == 'mel' else 0
 
+        # Repair the waveform according to the new sampling rate
         self.audioTool.resample(int(self.rateLineEdit.text()))
         self.audioTool.produceWaveform()
+        # Create the spectrogram
         self.audioTool.produceSpectrogram(n_fft=int(self.fftLineEdit.text()),
                                           hop_length=int(self.hopLineEdit.text()),
                                           win_length=int(self.lengthLineEdit.text()),
-                                          window=self.windowingComboBox.currentText().lower(),
-                                          scale=scale, n_mels=n_mels)
+                                          window=window, scale=scale, n_mels=n_mels)
         self.canvas.draw()
 
 app = QApplication(sys.argv)
