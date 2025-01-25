@@ -198,6 +198,8 @@ class UI(QMainWindow):
         self.audioLabel.setAlignment(Qt.AlignCenter)
         self.origRateLabel = QLabel('')
         self.currentRateLabel = QLabel('')
+        alert_label = QLabel('This will affect existing spectrograms')
+        alert_label.setAlignment(Qt.AlignCenter)
 
         # Create the rows to go into the waveform form
         self.waveForm.addRow(self.audioChooseButton)
@@ -206,6 +208,7 @@ class UI(QMainWindow):
         self.waveForm.addRow(self.currentRateLabel)
         self.waveForm.addRow(QLabel('New Sampling Rate (Hz)'), self.rateLineEdit)
         self.waveForm.addRow(self.resampleButton)
+        self.waveForm.addRow(alert_label)
 
         # Create the rows to go into the spectrogram form
         self.specForm.addRow(QLabel("FFT Size (samples)"), self.fftLineEdit)
@@ -270,6 +273,8 @@ class UI(QMainWindow):
             self.canvas.draw()
 
             self.audioLabel.setText(f"{self.audioTool.getFileName()} selected")
+            self.origRateLabel.setText(f"Original Sampling Rate: {self.audioTool.getOriginalSampleRate()}Hz")
+            self.currentRateLabel.setText(f"Current Sampling Rate: {self.audioTool.getCurrentSampleRate()}Hz")
 
     def exportPng(self):
         """
@@ -285,6 +290,7 @@ class UI(QMainWindow):
     def resampleWaveform(self):
         self.audioTool.resample(int(self.rateLineEdit.text()))
         self.audioTool.produceWaveform()
+        self.currentRateLabel.setText(f"Current Sampling Rate: {self.audioTool.getCurrentSampleRate()}Hz")
         self.generateSpectrogram()
         self.canvas.draw()
 
