@@ -7,7 +7,7 @@ import numpy
 import pathlib
 import sys
 
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QSize
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
 from PyQt5.QtWidgets import *
 from PyQt5.QtGui import *
@@ -123,8 +123,6 @@ class UI(QMainWindow):
         self.specFormFrame.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
         self.specForm = QFormLayout()
         self.specFormFrame.setLayout(self.specForm)
-        self.gridLayout.addWidget(self.specFormFrame, 0, 1, 1, 1, alignment=Qt.AlignJustify)
-        self.gridLayout.addWidget(QWidget().setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Expanding), 1, 1, 1, 1)
 
         # Create the menu for waveform parameters
         self.waveFormFrame = QFrame(self.centralWidget)
@@ -132,8 +130,6 @@ class UI(QMainWindow):
         self.waveFormFrame.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
         self.waveForm = QFormLayout()
         self.waveFormFrame.setLayout(self.waveForm)
-        self.gridLayout.addWidget(self.waveFormFrame, 0, 0, 1, 1, alignment=Qt.AlignJustify)
-        self.gridLayout.addWidget(QWidget().setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Expanding), 1, 0, 1, 1)
 
         # Create the text entries for parameters
         self.rateLineEdit = QLineEdit()
@@ -197,17 +193,28 @@ class UI(QMainWindow):
         self.specForm.addRow(QLabel("Mel Bands"), self.melLineEdit)
         self.specForm.addRow(self.specGenerateButton)
 
-        # Load the waveform entry button and allow it to toggle the form
-        self.waveButton = self.findChild(QPushButton, 'waveButton')
-        self.waveButton.clicked.connect(
-            lambda: self.waveFormFrame.setVisible(not self.waveFormFrame.isVisible()))
+        # Create the tab menu to edit settings
+        self.tabWidget = QTabWidget()
+        self.tabWidget.addTab(self.waveFormFrame, "Sound Settings")
+        self.tabWidget.addTab(self.specFormFrame, "Spectrogram Settings")
+        self.tabWidget.addTab(QWidget(), "Hide")
+        self.tabWidget.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
+        self.tabWidget.currentChanged.connect(self.adjustSize)
 
-        # Load the parameter entry button and allow it to toggle the form
-        self.specButton = self.findChild(QPushButton, 'specButton')
-        self.specButton.clicked.connect(
-            lambda: self.specFormFrame.setVisible(not self.specFormFrame.isVisible()))
+        # Add the tab widget to the grid and create padding around it.
+        self.gridLayout.addWidget(self.tabWidget, 0, 0, 1, 1)
+        self.gridLayout.addWidget(QWidget().setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding), 1, 0, 1, 1)
+        self.gridLayout.addWidget(QWidget().setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding), 0, 1, 1, 2)
+
+        # Save the tab sizes to a dictionary to switch
+        # tabHeight = self.tabWidget.tabBar().size().height()
+        # waveSize = QSize(self.tabWidget.sizeHint().width(), self.waveFormFrame.sizeHint().height() + tabHeight)
+        # specSize = QSize(self.tabWidget.sizeHint().width(), self.specFormFrame.sizeHint().height() + tabHeight)
+        # hideSize = QSize(self.tabWidget.sizeHint().width(), tabHeight)
+        # self.tabSizeDict = {0: waveSize, 1: specSize, 2: hideSize}
 
         # Show the application window
+        self.adjustSize()
         self.show()
 
     def reset(self):
