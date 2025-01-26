@@ -230,8 +230,9 @@ class UI(QMainWindow):
         # Add the spectrogram display frame to the grid with a padding to space it below the tabs
         spaceWidget = QWidget()
         spaceWidget.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
-        # TODO: remove hardcoded value
-        spaceWidget.setFixedHeight(4)
+        self.specFrameLayout.setSpacing(0)
+        # The tab bar uses 1px spacing on either side of text. Size hint cannot be used as it returns 21
+        spaceWidget.setFixedHeight(self.font().pointSize() + 2)
         self.specFrameLayout.addWidget(spaceWidget)
         self.specFrameLayout.addWidget(self.specFrame)
 
