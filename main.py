@@ -119,7 +119,7 @@ class UI(QMainWindow):
 
         # Load the UI file and load the center widget
         uic.loadUi('ui-25-01.ui', self)
-        self.centralWidget = self.findChild(QWidget, 'centralWidget')
+        self.centralWidget = self.findChild(QWidget, 'centralwidget')
 
         # Load all the menu bar items
         self.actionNew = self.findChild(QAction, 'actionNew')
@@ -132,7 +132,8 @@ class UI(QMainWindow):
         # Load the grid and change the frame to occupy 2*3 cells rather than 1*1
         self.gridLayout = self.findChild(QGridLayout, 'gridLayout')
         self.specFrame = self.findChild(QFrame, 'specFrame')
-        self.gridLayout.addWidget(self.specFrame, 0, 0, 2, 3)
+        self.specFrameLayout = QVBoxLayout()
+        self.gridLayout.addLayout(self.specFrameLayout, 0, 0, 2, 3)
 
         # Prepare the display canvas and tool that interacts with it
         self.specFrame.setLayout(QVBoxLayout())
@@ -225,12 +226,19 @@ class UI(QMainWindow):
         self.tabWidget.addTab(self.specFormFrame, "Spectrogram Settings")
         self.tabWidget.addTab(QWidget(), "Hide")
         self.tabWidget.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
-        self.tabWidget.currentChanged.connect(self.adjustSize)
+
+        # Add the spectrogram display frame to the grid with a padding to space it below the tabs
+        spaceWidget = QWidget()
+        spaceWidget.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
+        # TODO: remove hardcoded value
+        spaceWidget.setFixedHeight(4)
+        self.specFrameLayout.addWidget(spaceWidget)
+        self.specFrameLayout.addWidget(self.specFrame)
 
         # Add the tab widget to the grid and create padding around it.
         self.gridLayout.addWidget(self.tabWidget, 0, 0, 1, 1)
-        self.gridLayout.addWidget(QWidget().setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding), 1, 0, 1, 1)
-        self.gridLayout.addWidget(QWidget().setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding), 0, 1, 1, 2)
+        self.gridLayout.addWidget(QWidget(), 1, 0, 1, 1)
+        self.gridLayout.addWidget(QWidget(), 0, 1, 1, 2)
 
         # Show the application window
         self.adjustSize()
