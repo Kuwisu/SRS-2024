@@ -83,6 +83,8 @@ class AudioTool:
         self.ax[0].label_outer()
 
     def produceSpectrogram(self, n_fft, hop_length, win_length, window, scale, n_mels, cmap):
+        if self.colorbar is not None:
+            self.colorbar.remove()
         self.ax[1].cla()
 
         if scale == "mel":
@@ -95,12 +97,11 @@ class AudioTool:
                              win_length=win_length, window=window)
             s_db = librosa.power_to_db(numpy.abs(s), ref=numpy.max)
 
-        self.img = librosa.display.specshow(s_db, sr=self.sr, n_fft=n_fft,
-                                            win_length=win_length, hop_length=hop_length,
-                                            ax=self.ax[1], x_axis='time', y_axis=scale,
-                                            cmap=cmap)
-        if self.colorbar is None:
-            self.colorbar = self.figure.colorbar(self.img, ax=self.ax[1], format="%+2.f dB")
+        self.img = librosa.display.specshow(s_db, sr=self.sr,
+                                            n_fft=n_fft, win_length=win_length,
+                                            hop_length=hop_length, cmap=cmap,
+                                            ax=self.ax[1], x_axis='time', y_axis=scale)
+        self.colorbar = self.figure.colorbar(self.img, ax=self.ax[1], format="%+2.f dB")
 
         self.ax[1].set_title(f'{scale} spectrogram with {win_length} window length')
         self.ax[1].label_outer()
@@ -143,9 +144,12 @@ class UI(QMainWindow):
         self.audioChooseButton.clicked.connect(self.importFile)
         self.audioLabel = QLabel('No file selected')
         self.audioLabel.setAlignment(Qt.AlignCenter)
+        alert_label = QLabel('This will clear all existing graphs')
+        alert_label.setAlignment(Qt.AlignCenter)
 
-        self.soundImportForm.addRow(self.audioChooseButton)
         self.soundImportForm.addRow(self.audioLabel)
+        self.soundImportForm.addRow(self.audioChooseButton)
+        self.soundImportForm.addRow(alert_label)
 
         # WAVEFORM SETTINGS FORM
         self.waveFormFrame = QFrame(self.centralWidget)
@@ -160,9 +164,9 @@ class UI(QMainWindow):
         self.resampleButton = QPushButton('Resample')
         self.resampleButton.clicked.connect(self.resampleWaveform)
 
-        self.origRateLabel = QLabel('')
-        self.currentRateLabel = QLabel('')
-        alert_label = QLabel('This will affect existing spectrograms')
+        self.origRateLabel = QLabel('No file selected')
+        self.currentRateLabel = QLabel('No file selected')
+        alert_label = QLabel('This will modify all existing graphs')
         alert_label.setAlignment(Qt.AlignCenter)
 
         self.waveForm.addRow(self.origRateLabel)
@@ -257,6 +261,11 @@ class UI(QMainWindow):
         self.audioTool = AudioTool(self.canvas.figure)
 
         # Configure all parameter fields to the default upon opening
+        self.audioLabel.setText('No file selected')
+        self.origRateLabel.setText('No file selected')
+        self.currentRateLabel.setText('No file selected')
+        self.rateLineEdit.setText('')
+
         self.fftLineEdit.setText('')
         self.hopLineEdit.setText('')
         self.lengthLineEdit.setText('')
@@ -264,10 +273,12 @@ class UI(QMainWindow):
         self.windowingComboBox.setCurrentIndex(0)
         self.scaleComboBox.setCurrentIndex(0)
         self.melLineEdit.setEnabled(True)
+        self.colourComboBox.setCurrentIndex(0)
+        self.reverseCheckBox.setChecked(False)
 
     def importFile(self):
         """
-        Triggers upon clicking the 'Open' option on the menu bar.
+        Triggers upon clicking the 'Open' menu bar option or 'Import Audio' button.
         Prompts the user to select a audio file to use from the file explorer.
         Then, load that file into Librosa and draw the waveform.
         """
@@ -275,7 +286,7 @@ class UI(QMainWindow):
                                                 pathlib.Path().resolve().as_posix(),
                                                 'Audio (*.wav *.mp3 *.flac)')[0]
         if file_name:
-            # self.reset()
+            self.reset()
             self.audioTool.loadFile(file_name)
             self.audioTool.produceWaveform()
             self.canvas.draw()
@@ -284,7 +295,7 @@ class UI(QMainWindow):
             self.origRateLabel.setText(f"Original Sampling Rate: {self.audioTool.getOriginalSampleRate()}Hz")
             self.currentRateLabel.setText(f"Current Sampling Rate: {self.audioTool.getCurrentSampleRate()}Hz")
 
-            self.tabWidget.setCurrentIndex(1)
+            # Prefill the resample page with the current sampling rate
             self.rateLineEdit.setText(f"{self.audioTool.getCurrentSampleRate()}")
 
     def exportPng(self):
@@ -325,9 +336,6 @@ class UI(QMainWindow):
                                           window=window, scale=scale, n_mels=n_mels,
                                           cmap=cmap)
         self.canvas.draw()
-
-    def recolorSpectrogram(self, colormap):
-        self.audioTool.recolor(colormap.lower())
 
 app = QApplication(sys.argv)
 UIWindow = UI()
