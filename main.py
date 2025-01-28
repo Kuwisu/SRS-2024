@@ -271,8 +271,8 @@ class UI(QMainWindow):
 
     def reset(self):
         self.canvas.figure.clear()
-        self.canvas.draw()
         self.audioTool = AudioTool(self.canvas.figure)
+        self.canvas.draw()
 
         # Configure all parameter fields to the default upon opening
         self.audioLabel.setText('No file selected')
