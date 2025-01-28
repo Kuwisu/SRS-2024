@@ -182,14 +182,24 @@ class UI(QMainWindow):
         self.specForm = QFormLayout()
         self.specFormFrame.setLayout(self.specForm)
 
+        # Prepare 4 text fields and add them to a list for quick error checking
         self.fftLineEdit = QLineEdit()
         self.hopLineEdit = QLineEdit()
         self.lengthLineEdit = QLineEdit()
         self.melLineEdit = QLineEdit()
-        self.fftLineEdit.setValidator(QIntValidator())
-        self.hopLineEdit.setValidator(QIntValidator())
-        self.lengthLineEdit.setValidator(QIntValidator())
-        self.melLineEdit.setValidator(QIntValidator())
+        self.specLineEdits = [self.fftLineEdit, self.hopLineEdit, self.lengthLineEdit, self.melLineEdit]
+
+        for lineEdit in self.specLineEdits:
+            lineEdit.setValidator(QIntValidator())
+
+        self.fftLineEdit.textEdited.connect(
+            lambda: self.fftLineEdit.setStyleSheet(QLineEdit().styleSheet()))
+        self.hopLineEdit.textEdited.connect(
+            lambda: self.hopLineEdit.setStyleSheet(QLineEdit().styleSheet()))
+        self.lengthLineEdit.textEdited.connect(
+            lambda: self.lengthLineEdit.setStyleSheet(QLineEdit().styleSheet()))
+        self.melLineEdit.textEdited.connect(
+            lambda: self.melLineEdit.setStyleSheet(QLineEdit().styleSheet()))
 
         self.windowingComboBox = QComboBox()
         for index, window in WINDOW_FUNCTIONS.items():
@@ -322,6 +332,13 @@ class UI(QMainWindow):
         Combines the selected audio file with the parameter options
         that the user has selected.
         """
+        is_valid = True
+        for lineEdit in self.specLineEdits:
+            is_valid = self.checkLineEdit(lineEdit) and is_valid
+
+        if not is_valid:
+            return
+
         # Extract the correct term from the combo boxes
         scale = SPEC_SCALES.get(self.scaleComboBox.currentIndex())[1]
         window = WINDOW_FUNCTIONS.get(self.windowingComboBox.currentIndex())[1]
@@ -336,6 +353,15 @@ class UI(QMainWindow):
                                           window=window, scale=scale, n_mels=n_mels,
                                           cmap=cmap)
         self.canvas.draw()
+
+    def checkLineEdit(self, line_edit):
+        try:
+            int(line_edit.text())
+        except ValueError:
+            if line_edit.isEnabled():
+                line_edit.setStyleSheet("border: 1px solid red;")
+                return False
+        return True
 
 app = QApplication(sys.argv)
 UIWindow = UI()
