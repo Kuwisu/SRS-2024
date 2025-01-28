@@ -135,7 +135,7 @@ class AudioTool:
         else:
             s = librosa.stft(self.y, n_fft=n_fft, hop_length=hop_length,
                              win_length=win_length, window=window)
-            s_db = librosa.power_to_db(numpy.abs(s), ref=numpy.max)
+            s_db = librosa.amplitude_to_db(numpy.abs(s), ref=numpy.max)
 
         self.img = librosa.display.specshow(s_db, sr=self.sr,
                                             n_fft=n_fft, win_length=win_length,
@@ -160,6 +160,7 @@ class UI(QMainWindow):
     """
     Defines the main window and all UI interactions.
     """
+
     def __init__(self):
         super(UI, self).__init__()
 
@@ -212,7 +213,7 @@ class UI(QMainWindow):
 
         self.origRateLabel = QLabel('No file selected')
         self.currentRateLabel = QLabel('No file selected')
-        alert_label = QLabel('This will not affect existing spectrograms.')
+        alert_label = QLabel('This will not affect an existing spectrogram.')
         alert_label.setAlignment(Qt.AlignCenter)
         alert_label.setStyleSheet("color: red;")
         alert_label2 = QLabel('Create a new one to see the effects of the resampling.')
