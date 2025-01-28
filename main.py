@@ -26,16 +26,19 @@ WINDOW_FUNCTIONS = {0: ("Hanning", 'hann'),
 SPEC_SCALES = {0: ("Mel", 'mel'),
                1: ("Linear", 'linear'),
                2: ("Logarithmic", 'log')}
-# Colour maps chosen are ones that blend from one colour to another.
-COLOUR_MAPS = ["Magma", "Inferno", "Plasma", "Viridis", "Cividis", "Gray"]
+# Colour maps chosen are ones that blend from one colour to a different one.
+COLOUR_MAPS = ["Gray", "Magma", "Inferno", "Plasma", "Viridis", "Cividis"]
 
 class TabWidget(QTabWidget):
     """
-    Override the sizing method that the tab widget uses.
+    This class overrides the sizing method that QTabWidget uses so that
+    it will automatically resize to fit the current widget rather than
+    fitting the size of the largest widget.
 
     This code has been derived from user musicamante's implementation
     Link: https://stackoverflow.com/a/66053591
     """
+
     def __init__(self, *args, **kwargs):
         super(TabWidget, self).__init__(**kwargs)
         self.currentChanged.connect(self.updateGeometry)
@@ -53,36 +56,73 @@ class TabWidget(QTabWidget):
         return size
 
 class AudioTool:
+    """
+    This class manages graphing operations.
+    Its methods take in waveform/spectrogram parameters and then
+    applies them to an MPL figure that is passed in on initialisation.
+    """
+
     def __init__(self, figure):
+        # Draw a pair of axes for the waveform and spectrogram
         self.figure = figure
+        self.ax = self.figure.subplots(nrows=2, sharex=True)
+
+        # Initialise values defined in other functions
         self.fileName = ''
         self.y = None
         self.orig_sr = None
         self.sr = None
         self.colorbar = None
-        self.ax = self.figure.subplots(nrows=2, sharex=True)
+        self.specExists = False
+
+    def doesSpectrogramExist(self):
+        """ Retrieve whether a spectrogram has been created yet. """
+        return self.specExists
 
     def getFileName(self):
+        """ Retrieve the file name without the directory details. """
         return self.fileName.split('/')[-1]
 
     def getOriginalSampleRate(self):
+        """ Retrieve the native sampling rate of the audio file. """
         return self.orig_sr
 
     def getCurrentSampleRate(self):
+        """ Retrieve the sampling rate after resampling operations. """
         return self.sr
 
     def loadFile(self, file_name):
+        """
+        Load the file with the given name using its native sampling rate into
+        a numpy array representing the audio time series.
+
+        :param file_name: the path to access an audio file
+        """
         self.fileName = file_name
-        self.y, self.orig_sr = librosa.load(self.fileName, mono=True)
+        self.y, self.orig_sr = librosa.load(self.fileName, sr=None, mono=True)
         self.sr = self.orig_sr
 
     def produceWaveform(self):
+        """ Graph the amplitude over time waveform of the loaded array. """
         self.ax[0].cla()
         librosa.display.waveshow(self.y, sr=self.sr, ax=self.ax[0])
         self.ax[0].set_title(f"Waveform of {self.getFileName()} at {self.sr}Hz")
         self.ax[0].label_outer()
 
     def produceSpectrogram(self, n_fft, hop_length, win_length, window, scale, n_mels, cmap):
+        """
+        Produce a spectrogram of the loaded array with a set of provided details.
+
+        :param n_fft: the number of bins used to divide the window
+        :param hop_length: the distance between each window
+        :param win_length: the number of samples contained in each window
+        :param window: the function used to zero the edges of the window
+        :param scale: whether the spectrogram is mel, linear, or logarithmic
+        :param n_mels: the number of bands in the mel filter bank if
+        the spectrogram is mel; 0 otherwise
+        :param cmap: the colour map used to display the spectrogram
+        """
+        # Clear all pre-existing information
         if self.colorbar is not None:
             self.colorbar.remove()
         self.ax[1].cla()
@@ -105,10 +145,12 @@ class AudioTool:
 
         self.ax[1].set_title(f'{scale} spectrogram with {win_length} window length')
         self.ax[1].label_outer()
+        self.specExists = True
 
     def resample(self, target_sr):
-        # If attempting to resample to a larger sample rate, try to revert to
-        # the original recording.
+        """ Change the sampling rate of the numpy array. """
+        # If attempting to resample to a larger sampling rate, reload the
+        # original recording to prevent loss of data.
         if target_sr > self.sr:
             self.loadFile(self.fileName)
         self.y = librosa.resample(self.y, orig_sr=self.sr, target_sr=target_sr)
@@ -144,8 +186,9 @@ class UI(QMainWindow):
         self.audioChooseButton.clicked.connect(self.importFile)
         self.audioLabel = QLabel('No file selected')
         self.audioLabel.setAlignment(Qt.AlignCenter)
-        alert_label = QLabel('This will clear all existing graphs')
+        alert_label = QLabel('This will clear all existing graphs.')
         alert_label.setAlignment(Qt.AlignCenter)
+        alert_label.setStyleSheet("color: red;")
 
         self.soundImportForm.addRow(self.audioLabel)
         self.soundImportForm.addRow(self.audioChooseButton)
@@ -158,7 +201,7 @@ class UI(QMainWindow):
         self.waveForm = QFormLayout()
         self.waveFormFrame.setLayout(self.waveForm)
 
-        self.rateLineEdit = QLineEdit()
+        self.rateLineEdit = QLineEdit("22050")
         self.rateLineEdit.setValidator(QDoubleValidator())
         self.rateLineEdit.textEdited.connect(
             lambda: self.rateLineEdit.setStyleSheet(QLineEdit().styleSheet()))
@@ -169,14 +212,19 @@ class UI(QMainWindow):
 
         self.origRateLabel = QLabel('No file selected')
         self.currentRateLabel = QLabel('No file selected')
-        alert_label = QLabel('This will modify all existing graphs')
+        alert_label = QLabel('This will not affect existing spectrograms.')
         alert_label.setAlignment(Qt.AlignCenter)
+        alert_label.setStyleSheet("color: red;")
+        alert_label2 = QLabel('Create a new one to see the effects of the resampling.')
+        alert_label2.setAlignment(Qt.AlignCenter)
+        alert_label2.setStyleSheet("color: red;")
 
         self.waveForm.addRow(self.origRateLabel)
         self.waveForm.addRow(self.currentRateLabel)
         self.waveForm.addRow(QLabel('New Sampling Rate (Hz)'), self.rateLineEdit)
         self.waveForm.addRow(self.resampleButton)
         self.waveForm.addRow(alert_label)
+        self.waveForm.addRow(alert_label2)
 
         # SPECTROGRAM SETTINGS FORM
         self.specFormFrame = QFrame(self.centralWidget)
@@ -186,10 +234,10 @@ class UI(QMainWindow):
         self.specFormFrame.setLayout(self.specForm)
 
         # Prepare 4 text fields and add them to a list for quick error checking
-        self.fftLineEdit = QLineEdit()
-        self.hopLineEdit = QLineEdit()
-        self.lengthLineEdit = QLineEdit()
-        self.melLineEdit = QLineEdit()
+        self.fftLineEdit = QLineEdit("2048")
+        self.hopLineEdit = QLineEdit("512")
+        self.lengthLineEdit = QLineEdit("2048")
+        self.melLineEdit = QLineEdit("80")
         self.specLineEdits = [self.fftLineEdit, self.hopLineEdit, self.lengthLineEdit, self.melLineEdit]
 
         for lineEdit in self.specLineEdits:
@@ -278,12 +326,11 @@ class UI(QMainWindow):
         self.audioLabel.setText('No file selected')
         self.origRateLabel.setText('No file selected')
         self.currentRateLabel.setText('No file selected')
-        self.rateLineEdit.setText('')
-
-        self.fftLineEdit.setText('')
-        self.hopLineEdit.setText('')
-        self.lengthLineEdit.setText('')
-        self.melLineEdit.setText('')
+        self.rateLineEdit.setText("22050")
+        self.fftLineEdit.setText("2048")
+        self.hopLineEdit.setText("512")
+        self.lengthLineEdit.setText("2048")
+        self.melLineEdit.setText("80")
         self.windowingComboBox.setCurrentIndex(0)
         self.scaleComboBox.setCurrentIndex(0)
         self.melLineEdit.setEnabled(True)
@@ -315,9 +362,6 @@ class UI(QMainWindow):
             self.origRateLabel.setText(f"Original Sampling Rate: {self.audioTool.getOriginalSampleRate()}Hz")
             self.currentRateLabel.setText(f"Current Sampling Rate: {self.audioTool.getCurrentSampleRate()}Hz")
 
-            # Prefill the resample page with the current sampling rate
-            self.rateLineEdit.setText(f"{self.audioTool.getCurrentSampleRate()}")
-
     def exportPng(self):
         """
         Triggers upon clicking the 'Save as PNG' option on the menu bar.
@@ -338,7 +382,6 @@ class UI(QMainWindow):
 
         self.audioTool.produceWaveform()
         self.currentRateLabel.setText(f"Current Sampling Rate: {self.audioTool.getCurrentSampleRate()}Hz")
-        self.generateSpectrogram()
         self.canvas.draw()
 
     def generateSpectrogram(self):
@@ -374,8 +417,7 @@ class UI(QMainWindow):
             int(line_edit.text())
         except ValueError:
             if line_edit.isEnabled():
-                if self.tabWidget.currentIndex() == 2:
-                    line_edit.setStyleSheet("border: 1px solid red;")
+                line_edit.setStyleSheet("border: 1px solid red;")
                 return False
         return True
 
