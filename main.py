@@ -160,9 +160,12 @@ class UI(QMainWindow):
 
         self.rateLineEdit = QLineEdit()
         self.rateLineEdit.setValidator(QDoubleValidator())
+        self.rateLineEdit.textEdited.connect(
+            lambda: self.rateLineEdit.setStyleSheet(QLineEdit().styleSheet()))
 
         self.resampleButton = QPushButton('Resample')
         self.resampleButton.clicked.connect(self.resampleWaveform)
+        self.resampleButton.setEnabled(False)
 
         self.origRateLabel = QLabel('No file selected')
         self.currentRateLabel = QLabel('No file selected')
@@ -218,6 +221,7 @@ class UI(QMainWindow):
 
         self.specGenerateButton = QPushButton('Generate Spectrogram')
         self.specGenerateButton.clicked.connect(self.generateSpectrogram)
+        self.specGenerateButton.setEnabled(False)
 
         self.specForm.addRow(QLabel("FFT Size (samples)"), self.fftLineEdit)
         self.specForm.addRow(QLabel("Hop Size (samples)"), self.hopLineEdit)
@@ -286,6 +290,9 @@ class UI(QMainWindow):
         self.colourComboBox.setCurrentIndex(0)
         self.reverseCheckBox.setChecked(False)
 
+        self.resampleButton.setEnabled(False)
+        self.specGenerateButton.setEnabled(False)
+
     def importFile(self):
         """
         Triggers upon clicking the 'Open' menu bar option or 'Import Audio' button.
@@ -300,6 +307,9 @@ class UI(QMainWindow):
             self.audioTool.loadFile(file_name)
             self.audioTool.produceWaveform()
             self.canvas.draw()
+
+            self.resampleButton.setEnabled(True)
+            self.specGenerateButton.setEnabled(True)
 
             self.audioLabel.setText(f"{self.audioTool.getFileName()} selected")
             self.origRateLabel.setText(f"Original Sampling Rate: {self.audioTool.getOriginalSampleRate()}Hz")
@@ -320,7 +330,12 @@ class UI(QMainWindow):
         self.canvas.figure.savefig(name[0], format='png')
 
     def resampleWaveform(self):
-        self.audioTool.resample(int(self.rateLineEdit.text()))
+        try:
+            self.audioTool.resample(int(self.rateLineEdit.text()))
+        except ValueError:
+            self.rateLineEdit.setStyleSheet("border: 1px solid red;")
+            return
+
         self.audioTool.produceWaveform()
         self.currentRateLabel.setText(f"Current Sampling Rate: {self.audioTool.getCurrentSampleRate()}Hz")
         self.generateSpectrogram()
@@ -359,7 +374,8 @@ class UI(QMainWindow):
             int(line_edit.text())
         except ValueError:
             if line_edit.isEnabled():
-                line_edit.setStyleSheet("border: 1px solid red;")
+                if self.tabWidget.currentIndex() == 2:
+                    line_edit.setStyleSheet("border: 1px solid red;")
                 return False
         return True
 
