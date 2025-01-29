@@ -3,8 +3,10 @@ import traceback
 import librosa
 import librosa.feature
 import matplotlib.pyplot as plt
-import numpy
+import numpy as np
 import pathlib
+import soundfile as sf
+import soxr
 import sys
 
 from PyQt5.QtCore import Qt, QSize
@@ -14,7 +16,7 @@ from PyQt5.QtGui import *
 from PyQt5 import uic
 
 # Map the indices of the combo boxes to a tuple consisting of the string that
-# is displayed to the user, and the name that will be used by Librosa.
+# is displayed to the user, and the name that will be used as an argument.
 WINDOW_FUNCTIONS = {0: ("Hanning", 'hann'),
                     1: ("Hamming", 'hamming'),
                     2: ("Blackman", 'blackman'),
@@ -107,17 +109,27 @@ class AudioTool:
         """
         Load the file with the given name using its native sampling rate into
         a numpy array representing the audio time series.
+        If the file is stereo, average the channels and indicate this.
 
         :param file_name: the path to access an audio file
+        :return whether the provided signal was mono or stereo
         """
+        is_mono = True
         self.fileName = file_name
-        self.y, self.orig_sr = librosa.load(self.fileName, sr=None, mono=True)
+        self.y, self.orig_sr = sf.read(self.fileName, dtype='float32')
+        if self.y.ndim > 1:
+            # This line of code was developed using generative AI.
+            self.y = (self.y[:, 0] + self.y[:, 1]) / 2
+            is_mono = False
+
         self.sr = self.orig_sr
+        return is_mono
 
     def produceWaveform(self):
         """ Graph the amplitude over time waveform of the loaded array. """
         self.ax[0].cla()
-        librosa.display.waveshow(self.y, sr=self.sr, ax=self.ax[0])
+        times = np.linspace(0, len(self.y) / self.sr, len(self.y), dtype='float32')
+        self.ax[0].step(times, self.y, where='post')
         self.ax[0].set_title(f"Waveform of {self.getFileName()} at {self.sr}Hz")
         self.ax[0].label_outer()
 
@@ -144,11 +156,11 @@ class AudioTool:
             s = librosa.feature.melspectrogram(
                 y=self.y, sr=self.sr, n_fft=n_fft, win_length=win_length,
                 hop_length=hop_length, window=window, n_mels=n_mels)
-            s_db = librosa.power_to_db(numpy.abs(s), ref=numpy.max)
+            s_db = librosa.power_to_db(np.abs(s), ref=np.max)
         else:
             s = librosa.stft(self.y, n_fft=n_fft, hop_length=hop_length,
                              win_length=win_length, window=window)
-            s_db = librosa.amplitude_to_db(numpy.abs(s), ref=numpy.max)
+            s_db = librosa.amplitude_to_db(np.abs(s), ref=np.max)
 
         # Show the spectrogram as a graph with a colour bar to view z axis info
         self.img = librosa.display.specshow(s_db, sr=self.sr,
@@ -165,7 +177,7 @@ class AudioTool:
         # original recording to prevent loss of data.
         if target_sr > self.sr:
             self.loadFile(self.fileName)
-        self.y = librosa.resample(self.y, orig_sr=self.sr, target_sr=target_sr)
+        self.y = soxr.resample(self.y, self.sr, target_sr, 'HQ')
         self.sr = target_sr
 
 class UI(QMainWindow):
@@ -199,6 +211,9 @@ class UI(QMainWindow):
         self.audioLabel = QLabel('No file selected')
         self.audioLabel.setAlignment(Qt.AlignCenter)
 
+        self.channelLabel = QLabel('')
+        self.channelLabel.setAlignment(Qt.AlignCenter)
+
         alert_label = QLabel('This will clear all existing graphs.')
         alert_label.setAlignment(Qt.AlignCenter)
         alert_label.setStyleSheet("color: red;")
@@ -206,6 +221,7 @@ class UI(QMainWindow):
         self.soundImportForm = QFormLayout()
         self.soundImportFrame.setLayout(self.soundImportForm)
         self.soundImportForm.addRow(self.audioLabel)
+        self.soundImportForm.addRow(self.channelLabel)
         self.soundImportForm.addRow(self.audioChooseButton)
         self.soundImportForm.addRow(alert_label)
 
@@ -224,7 +240,7 @@ class UI(QMainWindow):
         self.resampleButton.setEnabled(False)
 
         self.origRateLabel = QLabel('No file selected')
-        self.currentRateLabel = QLabel('No file selected')
+        self.currentRateLabel = QLabel('')
 
         alert_label = QLabel('This will not affect an existing spectrogram.')
         alert_label.setAlignment(Qt.AlignCenter)
@@ -345,8 +361,9 @@ class UI(QMainWindow):
 
         # Configure all parameter fields to the default upon opening
         self.audioLabel.setText('No file selected')
+        self.channelLabel.setText('')
         self.origRateLabel.setText('No file selected')
-        self.currentRateLabel.setText('No file selected')
+        self.currentRateLabel.setText('')
         self.rateLineEdit.setText("22050")
         self.fftLineEdit.setText("2048")
         self.hopLineEdit.setText("512")
@@ -363,7 +380,7 @@ class UI(QMainWindow):
     def importFile(self):
         """
         Prompt the user to select an audio file to use from the file explorer.
-        Then, load that file into Librosa and draw the waveform.
+        Then, load that file as an array and draw the waveform.
         """
         file_name = QFileDialog.getOpenFileName(self, 'Open audio file',
                                                 pathlib.Path().resolve().as_posix(),
@@ -371,7 +388,7 @@ class UI(QMainWindow):
         if file_name:
             # Clear any existing plots and draw a new waveform graph.
             self.reset()
-            self.audioTool.loadFile(file_name)
+            is_mono = self.audioTool.loadFile(file_name)
             self.audioTool.produceWaveform()
             self.canvas.draw()
 
@@ -381,6 +398,8 @@ class UI(QMainWindow):
 
             # Configure info labels to display text based on the provided sound.
             self.audioLabel.setText(f"{self.audioTool.getFileName()} selected")
+            self.channelLabel.setText(f"{"Mono-channel signal" if is_mono 
+            else "Multi-channel signal - channels have been averaged"}")
             self.origRateLabel.setText(f"Original Sampling Rate: {self.audioTool.getOriginalSampleRate()}Hz")
             self.currentRateLabel.setText(f"Current Sampling Rate: {self.audioTool.getCurrentSampleRate()}Hz")
 
@@ -398,7 +417,7 @@ class UI(QMainWindow):
         """
         Change the sampling rate of an existing waveform diagram.
         """
-        # Outline it and cancel the operation if the field is not int
+        # Outline it and cancel the operation if the text entry is not int
         if not validateLineEditInt(self.rateLineEdit):
             return
 
@@ -420,7 +439,7 @@ class UI(QMainWindow):
         if not is_valid:
             return
 
-        # Extract librosa-accepted terms from the combo boxes
+        # Extract terms accepted as arguments from the combo boxes
         scale = SPEC_SCALES.get(self.scaleComboBox.currentIndex())[1]
         window = WINDOW_FUNCTIONS.get(self.windowingComboBox.currentIndex())[1]
         cmap = self.colourComboBox.currentText().lower()
