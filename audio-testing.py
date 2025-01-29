@@ -56,7 +56,8 @@ s_db = librosa.amplitude_to_db(np.abs(s), ref=np.max)
 w = hann(512)
 SFT = ShortTimeFFT(win=w, hop=128, fs=22050, fft_mode='onesided', mfft=512)
 Sx = SFT.spectrogram(y2)
-Sx_db = 10 * np.log10(np.fmax(Sx, 1e-5)) - 30
+Sx_db = 10 * np.log10(np.fmax(Sx, 1e-5))
+Sx_db = Sx_db - Sx_db.max()
 # im1 = ax[1].imshow(Sx_db, origin='lower', aspect='auto', cmap='viridis',
 #                    extent=SFT.extent(len(y2)))
 # plt.colorbar(im1, ax=ax[1])
