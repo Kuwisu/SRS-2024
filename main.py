@@ -163,11 +163,11 @@ class AudioTool:
             s_db = librosa.amplitude_to_db(np.abs(s), ref=np.max)
 
         # Show the spectrogram as a graph with a colour bar to view z axis info
-        self.img = librosa.display.specshow(s_db, sr=self.sr,
+        img = librosa.display.specshow(s_db, sr=self.sr,
                                             n_fft=n_fft, win_length=win_length,
                                             hop_length=hop_length, cmap=cmap,
                                             ax=self.ax[1], x_axis='time', y_axis=scale)
-        self.colorbar = self.figure.colorbar(self.img, ax=self.ax[1], format="%+2.f dB")
+        self.colorbar = self.figure.colorbar(img, ax=self.ax[1], format="%+2.f dB")
         self.ax[1].set_title(f'{scale} spectrogram with {win_length} window length')
         self.ax[1].label_outer()
 
