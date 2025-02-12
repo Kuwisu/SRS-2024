@@ -131,6 +131,7 @@ class AudioTool:
         times = np.linspace(0, len(self.y) / self.sr, len(self.y), dtype='float32')
         self.ax[0].step(times, self.y, where='post')
         self.ax[0].set_title(f"Waveform of {self.getFileName()} at {self.sr}Hz")
+        self.ax[0].set_ylabel('Amplitude')
         self.ax[0].label_outer()
 
     def produceSpectrogram(self, n_fft, hop_length, win_length, window, scale, n_mels, cmap):
