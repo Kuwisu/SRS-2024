@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from pyfilterbank import melbank
 from matplotlib.mlab import window_hanning
-from matplotlib.ticker import ScalarFormatter
+from matplotlib.ticker import ScalarFormatter, SymmetricalLogLocator
 from numpy.f2py.f90mod_rules import fgetdims2_sa
 from scipy.signal.windows import *
 from scipy.signal import ShortTimeFFT
@@ -88,17 +88,19 @@ times = np.linspace(0, len(y2) / 22050, len(y2), dtype='float32')
 # plt.colorbar(im1, ax=ax[1])
 
 # %% Plot a mel spectrogram
-# # Librosa spectrogram
-# s = librosa.feature.melspectrogram(y=y2, sr=22050, n_fft=512, hop_length=128, win_length=512, window='hann', n_mels=80)
-# s_db = librosa.power_to_db(np.abs(s), ref=np.max)
-# img = librosa.display.specshow(s_db, sr=22050, n_fft=512, hop_length=128, win_length=512,
-#                                cmap='viridis', x_axis='time', y_axis='mel', ax=ax[0])
-# plt.colorbar(img, ax=ax[0])
-# ax[0].set_ylabel('Frequency (Hz)')
-# ax[0].set_xlabel('Time (s)')
+n_mels = 80
+
+# Librosa spectrogram
+s = librosa.feature.melspectrogram(y=y2, sr=22050, n_fft=512, hop_length=128, win_length=512, window='hann', n_mels=n_mels, htk=True)
+s_db = librosa.power_to_db(np.abs(s), ref=np.max)
+img = librosa.display.specshow(s_db, sr=22050, n_fft=512, hop_length=128, win_length=512,
+                               cmap='viridis', x_axis='time', y_axis='mel', ax=ax[0], htk=True)
+plt.colorbar(img, ax=ax[0])
+ax[0].set_ylabel('Frequency (Hz)')
+ax[0].set_xlabel('Time (s)')
 
 # Librosa filterbank
-mel = librosa.filters.mel(sr=22050, n_fft=512, n_mels=80, htk=True)
+mel = librosa.filters.mel(sr=22050, n_fft=512, n_mels=n_mels, htk=True)
 
 # Scipy spectrogram
 w = hann(512)
@@ -108,11 +110,9 @@ Sx_db = 10 * np.log10(np.fmax(Sx, 1e-5))
 Sx_db = Sx_db - Sx_db.max()
 
 # Mel spectrogram inserts details here
-n_mels = 80
 # Convert lowest and highest frequency to mel
-f_min, f_max, _, _ = SFT.extent(len(y2), axes_seq='ft')
-f_min_mels = 2595 * np.log10(1 + f_min / 700)
-f_max_mels = 2595 * np.log10(1 + f_max / 700)
+f_min_mels = 2595 * np.log10(1 + 0 / 700)
+f_max_mels = 2595 * np.log10(1 + (22050 / 2) / 700)
 # Create equally spaced points in Hz for the mel filterbanks
 mel_banks = np.linspace(f_min_mels, f_max_mels, n_mels+2, dtype='float32')
 mel_banks_hz = 700*(10**(mel_banks / 2595) - 1)
@@ -131,32 +131,26 @@ for i in range(1, n_mels + 1):
             if den != 0:
                 weights[i-1, j] = (mel_banks_bins[i+1] - j) / den
 
-ax[0].set_yscale(value='symlog', base=2, linthresh=1000, linscale=1)
-ax[0].yaxis.set_major_formatter(ScalarFormatter())
-
-ax[1].set_yscale(value='symlog', base=2, linthresh=1000, linscale=1)
-ax[1].yaxis.set_major_formatter(ScalarFormatter())
-
-# Code borrowed from Librosa
 weights = weights / (np.sum(weights, axis=1, keepdims=1) + 1e-10)
 
 # # Plot the filterbanks
 # ax[0].plot(mel.T)
 # ax[1].plot(weights.T)
 
+ax[1].set_yscale(value='symlog', base=2, linthresh=1000)
+ax[1].yaxis.set_major_formatter(ScalarFormatter())
+
 # Plot a spectrogram using mel filterbanks
-melspec = np.matmul(mel, Sx_db)
-_, _, f0, f1 = SFT.extent(len(y2))
-im1 = ax[0].imshow(melspec, origin='lower', aspect='auto', cmap='viridis',
-                   extent=(0, len(y2)/22050, f0, f1))
-plt.colorbar(im1, ax=ax[0])
+fftfreqs = np.arange(0, (512//2 + 1), dtype=np.float32) * (22050//2) / 512
+melspec = np.dot(weights, Sx_db)
 
-melspec = np.matmul(weights, Sx_db)
-_, _, f0, f1 = SFT.extent(len(y2))
-im1 = ax[1].imshow(melspec, origin='lower', aspect='auto', cmap='viridis',
-                   extent=(0, len(y2)/22050, f0, f1))
+y_labels = np.linspace(0, f_max_mels, s_db.shape[0], dtype=np.float32)
+y_labels = 700 * (10 ** (y_labels / 2595) - 1)
+x_labels = np.linspace(0, len(y2)/22050, s_db.shape[1], dtype=np.float32)
+
+im1 = ax[1].pcolormesh(x_labels, y_labels, melspec, cmap='viridis')
+
 plt.colorbar(im1, ax=ax[1])
-
 
 # %% Display plot
 plt.show()
