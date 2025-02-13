@@ -1,7 +1,3 @@
-import traceback
-
-import librosa
-import librosa.feature
 import matplotlib.pyplot as plt
 import numpy as np
 import pathlib
@@ -9,27 +5,36 @@ import soundfile as sf
 import soxr
 import sys
 
-from PyQt5.QtCore import Qt, QSize
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
+from PyQt5.QtCore import Qt, QSize
 from PyQt5.QtWidgets import *
 from PyQt5.QtGui import *
 from PyQt5 import uic
+from matplotlib.ticker import ScalarFormatter
+from scipy.signal import ShortTimeFFT
+from scipy.signal.windows import *
 
 # Map the indices of the combo boxes to a tuple consisting of the string that
 # is displayed to the user, and the name that will be used as an argument.
-WINDOW_FUNCTIONS = {0: ("Hanning", 'hann'),
-                    1: ("Hamming", 'hamming'),
-                    2: ("Blackman", 'blackman'),
-                    3: ("Blackman-Harris", 'blackmanharris'),
-                    4: ("Flat Top", 'flattop'),
-                    5: ("Parzen", 'parzen'),
-                    6: ("Triangular", 'triang'),
-                    7: ("Rectangular", 'boxcar')}
+WINDOW_FUNCTIONS = {0: ("Hanning", hann),
+                    1: ("Hamming", hamming),
+                    2: ("Blackman", blackman),
+                    3: ("Blackman-Harris", blackmanharris),
+                    4: ("Flat Top", flattop),
+                    5: ("Parzen", parzen),
+                    6: ("Triangular", triang),
+                    7: ("Rectangular", boxcar)}
 SPEC_SCALES = {0: ("Mel", 'mel'),
                1: ("Linear", 'linear'),
                2: ("Logarithmic", 'log')}
 # Colour maps chosen are ones that blend from one colour to a different one.
 COLOUR_MAPS = ["Gray", "Magma", "Inferno", "Plasma", "Viridis", "Cividis"]
+
+def hz_to_mels(freq):
+    return 2595 * np.log10(1 + freq/700)
+
+def mels_to_hz(freq):
+    return 700 * (10**(freq/2595) - 1)
 
 def validateLineEditInt(line_edit):
     """
@@ -134,17 +139,15 @@ class AudioTool:
         self.ax[0].set_ylabel('Amplitude')
         self.ax[0].label_outer()
 
-    def produceSpectrogram(self, n_fft, hop_length, win_length, window, scale, n_mels, cmap):
+    def produceSpectrogram(self, n_fft, hop_length, window, scale, n_mels, cmap):
         """
         Produce a spectrogram of the loaded array with a set of provided details.
 
         :param n_fft: the number of bins used to divide the window
         :param hop_length: the distance between each window
-        :param win_length: the number of samples contained in each window
-        :param window: the function used to zero the edges of the window
+        :param window: an array containing a window function to apply in the STFT
         :param scale: whether the spectrogram is mel, linear, or logarithmic
-        :param n_mels: the number of bands in the mel filter bank if
-        the spectrogram is mel; 0 otherwise
+        :param n_mels: the number of bands in the mel filter bank
         :param cmap: the colour map used to display the spectrogram
         """
         # Clear all pre-existing information
@@ -152,25 +155,32 @@ class AudioTool:
             self.colorbar.remove()
         self.ax[1].cla()
 
-        # Create the spectrogram, using different functions if it is mel scale
-        if scale == "mel":
-            s = librosa.feature.melspectrogram(
-                y=self.y, sr=self.sr, n_fft=n_fft, win_length=win_length,
-                hop_length=hop_length, window=window, n_mels=n_mels)
-            s_db = librosa.power_to_db(np.abs(s), ref=np.max)
-        else:
-            s = librosa.stft(self.y, n_fft=n_fft, hop_length=hop_length,
-                             win_length=win_length, window=window)
-            s_db = librosa.amplitude_to_db(np.abs(s), ref=np.max)
+        # Create the spectrogram by taking the absolute square of the STFT
+        SFT = ShortTimeFFT(win=window, hop=hop_length, fs=self.sr, fft_mode='onesided', mfft=n_fft)
+        Sx = np.abs(SFT.stft(self.y, p0=0, p1=int(np.ceil(len(self.y) / hop_length)))) ** 2
 
-        # Show the spectrogram as a graph with a colour bar to view z axis info
-        img = librosa.display.specshow(s_db, sr=self.sr,
-                                            n_fft=n_fft, win_length=win_length,
-                                            hop_length=hop_length, cmap=cmap,
-                                            ax=self.ax[1], x_axis='time', y_axis=scale)
-        self.colorbar = self.figure.colorbar(img, ax=self.ax[1], format="%+2.f dB")
-        self.ax[1].set_title(f'{scale} spectrogram with {win_length} window length')
-        self.ax[1].label_outer()
+        # Convert the spectrogram into decibels
+        Sx_db = 10 * np.log10(np.fmax(Sx, 1e-5))
+        Sx_db = Sx_db - Sx_db.max()
+
+        if scale == 'mel':
+            Sx_db = np.dot(self.construct_filterbank(n_fft, n_mels), Sx_db)
+            self.ax[1].set_yscale(value='symlog', base=2, linthresh=1000)
+        elif scale == 'log':
+            self.ax[1].set_yscale(value='symlog', base=2, linthresh=64, linscale=0.5)
+
+        self.ax[1].yaxis.set_major_formatter(ScalarFormatter())
+        x_labels = np.linspace(0, len(self.y) / self.sr, Sx_db.shape[1], dtype=np.float32)
+
+        f_max = self.sr / 2
+        if scale == 'mel':
+            y_labels = np.linspace(0, hz_to_mels(f_max), Sx_db.shape[0], dtype=np.float32)
+            y_labels = mels_to_hz(y_labels)
+        else:
+            y_labels = np.linspace(0, f_max, Sx_db.shape[0], dtype=np.float32)
+
+        img = self.ax[1].pcolormesh(x_labels, y_labels, Sx_db, cmap=cmap)
+        self.colorbar = self.figure.colorbar(img, ax=self.ax[1], format='%+2.0f dB')
 
     def resample(self, target_sr):
         """ Change the sampling rate of the numpy array. """
@@ -180,6 +190,27 @@ class AudioTool:
             self.loadFile(self.fileName)
         self.y = soxr.resample(self.y, self.sr, target_sr, 'HQ')
         self.sr = target_sr
+
+    def construct_filterbank(self, n_fft, n_mels):
+        # Retrieve the center frequencies of mel banks, then convert them to FFT bins
+        f_max = self.sr / 2
+        mel_banks = np.linspace(0, hz_to_mels(f_max), n_mels+2, dtype=np.float32)
+        mel_banks = np.floor((n_fft+1) * mels_to_hz(mel_banks) / self.sr).astype(int)
+
+        # Construct a mel transformation matrix
+        weights = np.zeros((n_mels, int(n_fft//2 + 1)), dtype=np.float32)
+        for i in range(1, n_mels+1):
+            for j in range(1, int(n_fft//2 + 1)):
+                if mel_banks[i - 1] <= j <= mel_banks[i]:
+                    den = mel_banks[i] - mel_banks[i - 1]
+                    if den != 0:
+                        weights[i - 1, j] = (j - mel_banks[i - 1]) / den
+                elif mel_banks[i] < j < mel_banks[i + 1]:
+                    den = mel_banks[i + 1] - mel_banks[i]
+                    if den != 0:
+                        weights[i - 1, j] = (mel_banks[i + 1] - j) / den
+
+        return weights / (np.sum(weights, axis=1, keepdims=True)+1e-10)
 
 class UI(QMainWindow):
     """
@@ -442,21 +473,18 @@ class UI(QMainWindow):
 
         # Extract terms accepted as arguments from the combo boxes
         scale = SPEC_SCALES.get(self.scaleComboBox.currentIndex())[1]
-        window = WINDOW_FUNCTIONS.get(self.windowingComboBox.currentIndex())[1]
+        # The colour map is reversible by appending _r to it
         cmap = self.colourComboBox.currentText().lower()
-
-        # Only translate the number of mel bands if the scale is set to mel
-        n_mels = int(self.melLineEdit.text()) if scale == 'mel' else 0
-
-        # Colour maps are flipped by appending _r to the end of them
         cmap = cmap + '_r' if self.reverseCheckBox.isChecked() else cmap
+        # The window function array is retrieved using scipy
+        window_length = int(self.lengthLineEdit.text())
+        window = WINDOW_FUNCTIONS.get(self.windowingComboBox.currentIndex())[1](window_length)
 
         # Create the spectrogram and apply it to the canvas
         self.audioTool.produceSpectrogram(n_fft=int(self.fftLineEdit.text()),
                                           hop_length=int(self.hopLineEdit.text()),
-                                          win_length=int(self.lengthLineEdit.text()),
-                                          window=window, scale=scale, n_mels=n_mels,
-                                          cmap=cmap)
+                                          n_mels=int(self.melLineEdit.text()),
+                                          window=window, scale=scale, cmap=cmap)
         self.canvas.draw()
 
 
