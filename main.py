@@ -14,26 +14,25 @@ from matplotlib.ticker import ScalarFormatter
 from scipy.signal import ShortTimeFFT
 from scipy.signal.windows import *
 
-# Map the indices of the combo boxes to a tuple consisting of the string that
-# is displayed to the user, and the name that will be used as an argument.
-WINDOW_FUNCTIONS = {0: ("Hanning", hann),
-                    1: ("Hamming", hamming),
-                    2: ("Blackman", blackman),
-                    3: ("Blackman-Harris", blackmanharris),
-                    4: ("Flat Top", flattop),
-                    5: ("Parzen", parzen),
-                    6: ("Triangular", triang),
-                    7: ("Rectangular", boxcar)}
-SPEC_SCALES = {0: ("Mel", 'mel'),
-               1: ("Linear", 'linear'),
-               2: ("Logarithmic", 'log')}
+SPEC_SCALES = ["Mel", "Linear", "Logarithmic"]
+# Map the text displayed in the window combo box to a scipy window function.
+WINDOW_FUNCTIONS = {"Hanning": hann,
+                    "Hamming": hamming,
+                    "Blackman": blackman,
+                    "Blackman-Harris": blackmanharris,
+                    "Flat Top": flattop,
+                    "Parzen": parzen,
+                    "Triangular": triang,
+                    "Rectangular": boxcar}
 # Colour maps chosen are ones that blend from one colour to a different one.
 COLOUR_MAPS = ["Gray", "Magma", "Inferno", "Plasma", "Viridis", "Cividis"]
 
 def hz_to_mels(freq):
+    """ Convert a frequency or array of frequencies to the Mel scale. """
     return 2595 * np.log10(1 + freq/700)
 
 def mels_to_hz(freq):
+    """ Convert a frequency or array of frequencies in the Mel scale to Hz. """
     return 700 * (10**(freq/2595) - 1)
 
 def validateLineEditInt(line_edit):
@@ -166,7 +165,7 @@ class AudioTool:
         if scale == 'mel':
             Sx_db = np.dot(self.construct_filterbank(n_fft, n_mels), Sx_db)
             self.ax[1].set_yscale(value='symlog', base=2, linthresh=1000)
-        elif scale == 'log':
+        elif scale == 'logarithmic':
             self.ax[1].set_yscale(value='symlog', base=2, linthresh=64, linscale=0.5)
 
         self.ax[1].yaxis.set_major_formatter(ScalarFormatter())
@@ -185,13 +184,21 @@ class AudioTool:
     def resample(self, target_sr):
         """ Change the sampling rate of the numpy array. """
         # If attempting to resample to a larger sampling rate, reload the
-        # original recording to prevent loss of data.
+        # original recording to prevent or reduce loss of data.
         if target_sr > self.sr:
             self.loadFile(self.fileName)
         self.y = soxr.resample(self.y, self.sr, target_sr, 'HQ')
         self.sr = target_sr
 
     def construct_filterbank(self, n_fft, n_mels):
+        """
+        Create a transformation matrix to convert a spectrogram into a mel
+        spectrogram.
+
+        :param n_fft: the number of bins used to divide the window
+        :param n_mels: the number of bands in the mel filter bank
+        :return: the normalised transformation matrix
+        """
         # Retrieve the center frequencies of mel banks, then convert them to FFT bins
         f_max = self.sr / 2
         mel_banks = np.linspace(0, hz_to_mels(f_max), n_mels+2, dtype=np.float32)
@@ -210,6 +217,7 @@ class AudioTool:
                     if den != 0:
                         weights[i - 1, j] = (mel_banks[i + 1] - j) / den
 
+        # Normalise the matrix, adding a small value to prevent division errors
         return weights / (np.sum(weights, axis=1, keepdims=True)+1e-10)
 
 class UI(QMainWindow):
@@ -296,15 +304,15 @@ class UI(QMainWindow):
         self.specFormFrame.setAutoFillBackground(True)
         self.specFormFrame.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
 
-        self.fftLineEdit = QLineEdit("2048")
+        self.fftLineEdit = QLineEdit("1024")
         self.fftLineEdit.textEdited.connect(
             lambda: self.fftLineEdit.setStyleSheet(QLineEdit().styleSheet()))
 
-        self.hopLineEdit = QLineEdit("512")
+        self.hopLineEdit = QLineEdit("256")
         self.hopLineEdit.textEdited.connect(
             lambda: self.hopLineEdit.setStyleSheet(QLineEdit().styleSheet()))
 
-        self.lengthLineEdit = QLineEdit("2048")
+        self.lengthLineEdit = QLineEdit("1024")
         self.lengthLineEdit.textEdited.connect(
             lambda: self.lengthLineEdit.setStyleSheet(QLineEdit().styleSheet()))
 
@@ -318,12 +326,12 @@ class UI(QMainWindow):
             lineEdit.setValidator(QIntValidator())
 
         self.windowingComboBox = QComboBox()
-        for index, window in WINDOW_FUNCTIONS.items():
-            self.windowingComboBox.addItem(window[0])
+        for window in WINDOW_FUNCTIONS.keys():
+            self.windowingComboBox.addItem(window)
 
         self.scaleComboBox = QComboBox()
-        for index, scale in SPEC_SCALES.items():
-            self.scaleComboBox.addItem(scale[0])
+        for scale in SPEC_SCALES:
+            self.scaleComboBox.addItem(scale)
         self.scaleComboBox.activated[str].connect(
             lambda text: self.melLineEdit.setEnabled(text == "Mel"))
 
@@ -397,9 +405,9 @@ class UI(QMainWindow):
         self.origRateLabel.setText('No file selected')
         self.currentRateLabel.setText('')
         self.rateLineEdit.setText("22050")
-        self.fftLineEdit.setText("2048")
-        self.hopLineEdit.setText("512")
-        self.lengthLineEdit.setText("2048")
+        self.fftLineEdit.setText("1024")
+        self.hopLineEdit.setText("256")
+        self.lengthLineEdit.setText("1024")
         self.melLineEdit.setText("80")
         self.windowingComboBox.setCurrentIndex(0)
         self.scaleComboBox.setCurrentIndex(0)
@@ -472,13 +480,13 @@ class UI(QMainWindow):
             return
 
         # Extract terms accepted as arguments from the combo boxes
-        scale = SPEC_SCALES.get(self.scaleComboBox.currentIndex())[1]
+        scale = self.scaleComboBox.currentText().lower()
         # The colour map is reversible by appending _r to it
         cmap = self.colourComboBox.currentText().lower()
         cmap = cmap + '_r' if self.reverseCheckBox.isChecked() else cmap
         # The window function array is retrieved using scipy
         window_length = int(self.lengthLineEdit.text())
-        window = WINDOW_FUNCTIONS.get(self.windowingComboBox.currentIndex())[1](window_length)
+        window = WINDOW_FUNCTIONS.get(self.windowingComboBox.currentText())(window_length)
 
         # Create the spectrogram and apply it to the canvas
         self.audioTool.produceSpectrogram(n_fft=int(self.fftLineEdit.text()),
