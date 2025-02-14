@@ -35,22 +35,25 @@ def mels_to_hz(freq):
     """ Convert a frequency or array of frequencies in the Mel scale to Hz. """
     return 700 * (10**(freq/2595) - 1)
 
-def validateLineEditInt(line_edit):
+def retrieve_int_field(line_edit, is_valid):
     """
     Text entries are checked to make sure they are valid integers.
     If not, the text box is cleared and coloured red to signal an error.
 
     :param line_edit: the text field to validate
-    :return: True if integer or disabled, False otherwise
+    :param is_valid: whether the overall form is currently valid
+    :return: True if integer or disabled, False otherwise; also return
+    the text contained in the line edit
     """
     try:
-        int(line_edit.text())
+        value = int(line_edit.text())
     except ValueError:
+        value = 0
         if line_edit.isEnabled():
             line_edit.setText("")
             line_edit.setStyleSheet("border: 1px solid red;")
-            return False
-    return True
+            return False, value
+    return is_valid, value
 
 class TabWidget(QTabWidget):
     """
@@ -230,57 +233,56 @@ class UI(QMainWindow):
 
         # FILE
         uic.loadUi('ui-25-01.ui', self)
-        self.centralWidget = self.findChild(QWidget, 'centralwidget')
+        central_widget = self.findChild(QWidget, 'centralwidget')
 
         # MENU BAR
-        self.actionNew = self.findChild(QAction, 'actionNew')
-        self.actionOpen = self.findChild(QAction, 'actionOpen')
-        self.actionSavePng = self.findChild(QAction, 'actionSavePng')
-        self.actionNew.triggered.connect(self.reset)
-        self.actionOpen.triggered.connect(self.importFile)
-        self.actionSavePng.triggered.connect(self.exportPng)
+        action_new = self.findChild(QAction, 'actionNew')
+        action_open = self.findChild(QAction, 'actionOpen')
+        action_save_png = self.findChild(QAction, 'actionSavePng')
+        action_new.triggered.connect(self.reset)
+        action_open.triggered.connect(self.import_file)
+        action_save_png.triggered.connect(self.export_graph)
 
         # SOUND IMPORT TAB
-        self.soundImportFrame = QFrame(self.centralWidget)
-        self.soundImportFrame.setAutoFillBackground(True)
-        self.soundImportFrame.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        sound_import_frame = QFrame(central_widget)
+        sound_import_frame.setAutoFillBackground(True)
+        sound_import_frame.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
 
-        self.audioChooseButton = QPushButton('Select Audio File')
-        self.audioChooseButton.clicked.connect(self.importFile)
+        open_file_button = QPushButton('Select Audio File')
+        open_file_button.clicked.connect(self.import_file)
 
-        self.audioLabel = QLabel('No file selected')
-        self.audioLabel.setAlignment(Qt.AlignCenter)
+        self.file_label = QLabel('No file selected')
+        self.file_label.setAlignment(Qt.AlignCenter)
 
-        self.channelLabel = QLabel('')
-        self.channelLabel.setAlignment(Qt.AlignCenter)
+        self.channel_label = QLabel('')
+        self.channel_label.setAlignment(Qt.AlignCenter)
 
         alert_label = QLabel('This will clear all existing graphs.')
         alert_label.setAlignment(Qt.AlignCenter)
         alert_label.setStyleSheet("color: red;")
 
-        self.soundImportForm = QFormLayout()
-        self.soundImportFrame.setLayout(self.soundImportForm)
-        self.soundImportForm.addRow(self.audioLabel)
-        self.soundImportForm.addRow(self.channelLabel)
-        self.soundImportForm.addRow(self.audioChooseButton)
-        self.soundImportForm.addRow(alert_label)
+        sound_import_form = QFormLayout(sound_import_frame)
+        sound_import_form.addRow(self.file_label)
+        sound_import_form.addRow(self.channel_label)
+        sound_import_form.addRow(open_file_button)
+        sound_import_form.addRow(alert_label)
 
         # RESAMPLING TAB
-        self.waveFormFrame = QFrame(self.centralWidget)
-        self.waveFormFrame.setAutoFillBackground(True)
-        self.waveFormFrame.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        resample_frame = QFrame(central_widget)
+        resample_frame.setAutoFillBackground(True)
+        resample_frame.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
 
-        self.rateLineEdit = QLineEdit("22050")
-        self.rateLineEdit.setValidator(QIntValidator())
-        self.rateLineEdit.textEdited.connect(
-            lambda: self.rateLineEdit.setStyleSheet(QLineEdit().styleSheet()))
+        self.sample_rate_field = QLineEdit("22050")
+        self.sample_rate_field.setValidator(QIntValidator())
+        self.sample_rate_field.textEdited.connect(
+            lambda: self.sample_rate_field.setStyleSheet(QLineEdit().styleSheet()))
 
-        self.resampleButton = QPushButton('Resample')
-        self.resampleButton.clicked.connect(self.resampleWaveform)
-        self.resampleButton.setEnabled(False)
+        self.resample_button = QPushButton('Resample')
+        self.resample_button.clicked.connect(self.resample_wave)
+        self.resample_button.setEnabled(False)
 
-        self.origRateLabel = QLabel('No file selected')
-        self.currentRateLabel = QLabel('')
+        self.native_rate_label = QLabel('No file selected')
+        self.sample_rate_label = QLabel('')
 
         alert_label = QLabel('This will not affect an existing spectrogram.')
         alert_label.setAlignment(Qt.AlignCenter)
@@ -290,103 +292,100 @@ class UI(QMainWindow):
         alert_label2.setAlignment(Qt.AlignCenter)
         alert_label2.setStyleSheet("color: red;")
 
-        self.waveForm = QFormLayout()
-        self.waveFormFrame.setLayout(self.waveForm)
-        self.waveForm.addRow(self.origRateLabel)
-        self.waveForm.addRow(self.currentRateLabel)
-        self.waveForm.addRow(QLabel('New Sampling Rate (Hz)'), self.rateLineEdit)
-        self.waveForm.addRow(self.resampleButton)
-        self.waveForm.addRow(alert_label)
-        self.waveForm.addRow(alert_label2)
+        resample_form = QFormLayout(resample_frame)
+        resample_form.addRow(self.native_rate_label)
+        resample_form.addRow(self.sample_rate_label)
+        resample_form.addRow(QLabel('New Sampling Rate (Hz)'), self.sample_rate_field)
+        resample_form.addRow(self.resample_button)
+        resample_form.addRow(alert_label)
+        resample_form.addRow(alert_label2)
 
         # SPECTROGRAM SETTINGS FORM
-        self.specFormFrame = QFrame(self.centralWidget)
-        self.specFormFrame.setAutoFillBackground(True)
-        self.specFormFrame.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        spectrogram_frame = QFrame(central_widget)
+        spectrogram_frame.setAutoFillBackground(True)
+        spectrogram_frame.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
 
-        self.fftLineEdit = QLineEdit("1024")
-        self.fftLineEdit.textEdited.connect(
-            lambda: self.fftLineEdit.setStyleSheet(QLineEdit().styleSheet()))
+        self.fft_field = QLineEdit("1024")
+        self.fft_field.setValidator(QIntValidator())
+        self.fft_field.textEdited.connect(
+            lambda: self.fft_field.setStyleSheet(QLineEdit().styleSheet()))
 
-        self.hopLineEdit = QLineEdit("256")
-        self.hopLineEdit.textEdited.connect(
-            lambda: self.hopLineEdit.setStyleSheet(QLineEdit().styleSheet()))
+        self.hop_field = QLineEdit("256")
+        self.hop_field.setValidator(QIntValidator())
+        self.hop_field.textEdited.connect(
+            lambda: self.hop_field.setStyleSheet(QLineEdit().styleSheet()))
 
-        self.lengthLineEdit = QLineEdit("1024")
-        self.lengthLineEdit.textEdited.connect(
-            lambda: self.lengthLineEdit.setStyleSheet(QLineEdit().styleSheet()))
+        self.window_length_field = QLineEdit("1024")
+        self.window_length_field.setValidator(QIntValidator())
+        self.window_length_field.textEdited.connect(
+            lambda: self.window_length_field.setStyleSheet(QLineEdit().styleSheet()))
 
-        self.melLineEdit = QLineEdit("80")
-        self.melLineEdit.textEdited.connect(
-            lambda: self.melLineEdit.setStyleSheet(QLineEdit().styleSheet()))
+        self.mel_field = QLineEdit("80")
+        self.mel_field.setValidator(QIntValidator())
+        self.mel_field.textEdited.connect(
+            lambda: self.mel_field.setStyleSheet(QLineEdit().styleSheet()))
 
-        # Add the fields to a list to iterate through them for error checking
-        self.specLineEdits = [self.fftLineEdit, self.hopLineEdit, self.lengthLineEdit, self.melLineEdit]
-        for lineEdit in self.specLineEdits:
-            lineEdit.setValidator(QIntValidator())
-
-        self.windowingComboBox = QComboBox()
+        self.window_combobox = QComboBox()
         for window in WINDOW_FUNCTIONS.keys():
-            self.windowingComboBox.addItem(window)
+            self.window_combobox.addItem(window)
 
-        self.scaleComboBox = QComboBox()
+        self.scale_combobox = QComboBox()
+        self.scale_combobox.activated[str].connect(
+            lambda text: self.mel_field.setEnabled(text == "Mel"))
         for scale in SPEC_SCALES:
-            self.scaleComboBox.addItem(scale)
-        self.scaleComboBox.activated[str].connect(
-            lambda text: self.melLineEdit.setEnabled(text == "Mel"))
+            self.scale_combobox.addItem(scale)
 
-        self.colourComboBox = QComboBox()
+        self.colour_combobox = QComboBox()
         for colour in COLOUR_MAPS:
-            self.colourComboBox.addItem(colour)
-        self.reverseCheckBox = QCheckBox()
+            self.colour_combobox.addItem(colour)
+        self.reverse_checkbox = QCheckBox()
 
-        self.specGenerateButton = QPushButton('Generate Spectrogram')
-        self.specGenerateButton.clicked.connect(self.generateSpectrogram)
-        self.specGenerateButton.setEnabled(False)
+        self.spectrogram_button = QPushButton('Generate Spectrogram')
+        self.spectrogram_button.clicked.connect(self.generate_spectrogram)
+        self.spectrogram_button.setEnabled(False)
 
-        self.specForm = QFormLayout()
-        self.specFormFrame.setLayout(self.specForm)
-        self.specForm.addRow(QLabel("FFT Size (samples)"), self.fftLineEdit)
-        self.specForm.addRow(QLabel("Hop Size (samples)"), self.hopLineEdit)
-        self.specForm.addRow(QLabel("Window Length (samples)"), self.lengthLineEdit)
-        self.specForm.addRow(QLabel("Windowing Function"), self.windowingComboBox)
-        self.specForm.addRow(QLabel("Scale"), self.scaleComboBox)
-        self.specForm.addRow(QLabel("Mel Bands"), self.melLineEdit)
-        self.specForm.addRow(QLabel("Colour Map"), self.colourComboBox)
-        self.specForm.addRow(QLabel("Reverse Colours?"), self.reverseCheckBox)
-        self.specForm.addRow(self.specGenerateButton)
+        spectrogram_form = QFormLayout(spectrogram_frame)
+        spectrogram_form.addRow(QLabel("FFT Size (samples)"), self.fft_field)
+        spectrogram_form.addRow(QLabel("Hop Size (samples)"), self.hop_field)
+        spectrogram_form.addRow(QLabel("Window Length (samples)"), self.window_length_field)
+        spectrogram_form.addRow(QLabel("Windowing Function"), self.window_combobox)
+        spectrogram_form.addRow(QLabel("Scale"), self.scale_combobox)
+        spectrogram_form.addRow(QLabel("Mel Bands"), self.mel_field)
+        spectrogram_form.addRow(QLabel("Colour Map"), self.colour_combobox)
+        spectrogram_form.addRow(QLabel("Reverse Colours?"), self.reverse_checkbox)
+        spectrogram_form.addRow(self.spectrogram_button)
 
         # TAB MENU
-        self.tabWidget = TabWidget()
-        self.tabWidget.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        tab_widget = TabWidget()
+        tab_widget.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
 
-        self.tabWidget.addTab(self.soundImportFrame, "Import")
-        self.tabWidget.addTab(self.waveFormFrame, "Resample")
-        self.tabWidget.addTab(self.specFormFrame, "Create Spectrogram")
-        self.tabWidget.addTab(QWidget(), "Hide")
+        tab_widget.addTab(sound_import_frame, "Import")
+        tab_widget.addTab(resample_frame, "Resample")
+        tab_widget.addTab(spectrogram_frame, "Create Spectrogram")
+        tab_widget.addTab(QWidget(), "Hide")
 
-        # SPECTROGRAM CONTAINER
-        self.specFrame = self.findChild(QFrame, 'specFrame')
-        # TODO: clean up naming here - distinction between specFrameLayout and specFrame.layout()
-        self.specFrame.setLayout(QVBoxLayout())
+        # PLOT CONTAINER
+        # TODO: see about leaving this convoluted method
+        plotting_frame = self.findChild(QFrame, 'specFrame')
+        plotting_frame.setLayout(QVBoxLayout())
         self.canvas = FigureCanvasQTAgg(plt.Figure(layout='constrained'))
-        self.specFrame.layout().addWidget(self.canvas)
-        self.audioTool = AudioTool(self.canvas.figure)
+        plotting_frame.layout().addWidget(self.canvas)
+        self.audio_tool = AudioTool(self.canvas.figure)
 
-        self.specFrameLayout = QVBoxLayout()
-        self.specFrameLayout.setSpacing(0)
+        plot_layout = QVBoxLayout()
+        plot_layout.setSpacing(0)
 
-        spaceWidget = QWidget()
-        spaceWidget.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
-        spaceWidget.setFixedHeight(self.font().pointSize() + 2)
+        spacer = QWidget()
+        spacer.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
+        spacer.setFixedHeight(self.font().pointSize() + 2)
 
-        self.specFrameLayout.addWidget(spaceWidget)
-        self.specFrameLayout.addWidget(self.specFrame)
+        plot_layout.addWidget(spacer)
+        plot_layout.addWidget(plotting_frame)
 
         # GRID LAYOUT
-        self.gridLayout = self.findChild(QGridLayout, 'gridLayout')
-        self.gridLayout.addLayout(self.specFrameLayout, 0, 0, 2, 3)
-        self.gridLayout.addWidget(self.tabWidget, 0, 0, 1, 1)
+        grid_layout = self.findChild(QGridLayout, 'gridLayout')
+        grid_layout.addLayout(plot_layout, 0, 0, 2, 3)
+        grid_layout.addWidget(tab_widget, 0, 0, 1, 1)
 
         # SHOW WINDOW
         self.adjustSize()
@@ -396,28 +395,28 @@ class UI(QMainWindow):
         """ Reset all values and figures to a clear state. """
         # Wipe the graph and reset the information stored in the graphing aid
         self.canvas.figure.clear()
-        self.audioTool = AudioTool(self.canvas.figure)
+        self.audio_tool = AudioTool(self.canvas.figure)
         self.canvas.draw()
 
         # Configure all parameter fields to the default upon opening
-        self.audioLabel.setText('No file selected')
-        self.channelLabel.setText('')
-        self.origRateLabel.setText('No file selected')
-        self.currentRateLabel.setText('')
-        self.rateLineEdit.setText("22050")
-        self.fftLineEdit.setText("1024")
-        self.hopLineEdit.setText("256")
-        self.lengthLineEdit.setText("1024")
-        self.melLineEdit.setText("80")
-        self.windowingComboBox.setCurrentIndex(0)
-        self.scaleComboBox.setCurrentIndex(0)
-        self.melLineEdit.setEnabled(True)
-        self.colourComboBox.setCurrentIndex(0)
-        self.reverseCheckBox.setChecked(False)
-        self.resampleButton.setEnabled(False)
-        self.specGenerateButton.setEnabled(False)
+        self.file_label.setText('No file selected')
+        self.channel_label.setText('')
+        self.native_rate_label.setText('No file selected')
+        self.sample_rate_label.setText('')
+        self.sample_rate_field.setText("22050")
+        self.fft_field.setText("1024")
+        self.hop_field.setText("256")
+        self.window_length_field.setText("1024")
+        self.mel_field.setText("80")
+        self.window_combobox.setCurrentIndex(0)
+        self.scale_combobox.setCurrentIndex(0)
+        self.mel_field.setEnabled(True)
+        self.colour_combobox.setCurrentIndex(0)
+        self.reverse_checkbox.setChecked(False)
+        self.resample_button.setEnabled(False)
+        self.spectrogram_button.setEnabled(False)
 
-    def importFile(self):
+    def import_file(self):
         """
         Prompt the user to select an audio file to use from the file explorer.
         Then, load that file as an array and draw the waveform.
@@ -428,22 +427,23 @@ class UI(QMainWindow):
         if file_name:
             # Clear any existing plots and draw a new waveform graph.
             self.reset()
-            is_mono = self.audioTool.loadFile(file_name)
-            self.audioTool.produceWaveform()
+            is_mono = self.audio_tool.loadFile(file_name)
+            self.audio_tool.produceWaveform()
             self.canvas.draw()
 
             # Enable the graphing buttons to be toggled.
-            self.resampleButton.setEnabled(True)
-            self.specGenerateButton.setEnabled(True)
+            self.resample_button.setEnabled(True)
+            self.spectrogram_button.setEnabled(True)
 
             # Configure info labels to display text based on the provided sound.
-            self.audioLabel.setText(f"{self.audioTool.getFileName()} selected")
-            self.channelLabel.setText(f"{"Mono-channel signal" if is_mono 
-            else "Multi-channel signal - channels have been averaged"}")
-            self.origRateLabel.setText(f"Original Sampling Rate: {self.audioTool.getOriginalSampleRate()}Hz")
-            self.currentRateLabel.setText(f"Current Sampling Rate: {self.audioTool.getCurrentSampleRate()}Hz")
+            channel = "Mono-channel signal" if is_mono else \
+                "Multi-channel signal - channels have been averaged"
+            self.file_label.setText(f"{self.audio_tool.getFileName()} selected")
+            self.channel_label.setText(f"{channel}")
+            self.native_rate_label.setText(f"Original Sampling Rate: {self.audio_tool.getOriginalSampleRate()}Hz")
+            self.sample_rate_label.setText(f"Current Sampling Rate: {self.audio_tool.getCurrentSampleRate()}Hz")
 
-    def exportPng(self):
+    def export_graph(self):
         """
         Prompt the user to enter a file name on the file explorer, then saves
         the current image as a PNG to that file location.
@@ -453,46 +453,45 @@ class UI(QMainWindow):
                                            'PNG File (*.png)')
         self.canvas.figure.savefig(name[0], format='png')
 
-    def resampleWaveform(self):
+    def resample_wave(self):
         """
         Change the sampling rate of an existing waveform diagram.
         """
-        # Outline it and cancel the operation if the text entry is not int
-        if not validateLineEditInt(self.rateLineEdit):
+        # Outline the text box and cancel the operation if the text entry is not int
+        is_valid, new_sr = retrieve_int_field(self.sample_rate_field, True)
+        if not is_valid:
             return
 
-        self.audioTool.resample(int(self.rateLineEdit.text()))
-        self.audioTool.produceWaveform()
-        self.currentRateLabel.setText(f"Current Sampling Rate: {self.audioTool.getCurrentSampleRate()}Hz")
+        self.audio_tool.resample(new_sr)
+        self.audio_tool.produceWaveform()
+        self.sample_rate_label.setText(f"Current Sampling Rate: {new_sr}Hz")
         self.canvas.draw()
 
-    def generateSpectrogram(self):
+    def generate_spectrogram(self):
         """
         Create a spectrogram using the provided audio file and the parameters
         that the user has entered in the text fields.
         """
-        # Iterate through every field and outline it if it is invalid
-        is_valid = True
-        for lineEdit in self.specLineEdits:
-            is_valid = validateLineEditInt(lineEdit) and is_valid
+        # Check every text field and outline it if it is invalid
+        is_valid, fft = retrieve_int_field(self.fft_field, True)
+        is_valid, hop = retrieve_int_field(self.hop_field, is_valid)
+        is_valid, win = retrieve_int_field(self.window_length_field, is_valid)
+        is_valid, mel = retrieve_int_field(self.mel_field, is_valid)
 
         if not is_valid:
             return
 
         # Extract terms accepted as arguments from the combo boxes
-        scale = self.scaleComboBox.currentText().lower()
+        scale = self.scale_combobox.currentText().lower()
         # The colour map is reversible by appending _r to it
-        cmap = self.colourComboBox.currentText().lower()
-        cmap = cmap + '_r' if self.reverseCheckBox.isChecked() else cmap
+        cmap = self.colour_combobox.currentText().lower()
+        cmap = cmap + '_r' if self.reverse_checkbox.isChecked() else cmap
         # The window function array is retrieved using scipy
-        window_length = int(self.lengthLineEdit.text())
-        window = WINDOW_FUNCTIONS.get(self.windowingComboBox.currentText())(window_length)
+        window = WINDOW_FUNCTIONS.get(self.window_combobox.currentText())(win)
 
         # Create the spectrogram and apply it to the canvas
-        self.audioTool.produceSpectrogram(n_fft=int(self.fftLineEdit.text()),
-                                          hop_length=int(self.hopLineEdit.text()),
-                                          n_mels=int(self.melLineEdit.text()),
-                                          window=window, scale=scale, cmap=cmap)
+        self.audio_tool.produceSpectrogram(n_fft=fft, hop_length=hop, n_mels=mel, window=window,
+                                           scale=scale, cmap=cmap)
         self.canvas.draw()
 
 
