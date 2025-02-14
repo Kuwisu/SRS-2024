@@ -5,6 +5,7 @@ import soundfile as sf
 import soxr
 import sys
 
+from inspect import signature
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
 from PyQt5.QtCore import Qt, QSize
 from PyQt5.QtWidgets import *
@@ -35,7 +36,7 @@ def mels_to_hz(freq):
     """ Convert a frequency or array of frequencies in the Mel scale to Hz. """
     return 700 * (10**(freq/2595) - 1)
 
-def retrieve_int_field(line_edit, is_valid):
+def retrieve_int_field(line_edit, is_valid=True):
     """
     Text entries are checked to make sure they are valid integers.
     If not, the text box is cleared and coloured red to signal an error.
@@ -91,28 +92,28 @@ class AudioTool:
     def __init__(self, figure):
         # Draw a pair of axes for the waveform and spectrogram
         self.figure = figure
-        self.ax = self.figure.subplots(nrows=2, sharex=True)
+        self.figure.subplots(nrows=2, sharex=True)
 
         # Initialise values defined in other functions
-        self.fileName = ''
+        self.file_name = ''
         self.y = None
-        self.orig_sr = None
         self.sr = None
+        self.native_sr = None
         self.colorbar = None
 
-    def getFileName(self):
+    def get_file_name(self):
         """ Retrieve the file name without the directory details. """
-        return self.fileName.split('/')[-1]
+        return self.file_name.split('/')[-1]
 
-    def getOriginalSampleRate(self):
+    def get_native_rate(self):
         """ Retrieve the native sampling rate of the audio file. """
-        return self.orig_sr
+        return self.native_sr
 
-    def getCurrentSampleRate(self):
+    def get_sample_rate(self):
         """ Retrieve the sampling rate after resampling operations. """
         return self.sr
 
-    def loadFile(self, file_name):
+    def load_file(self, file_name):
         """
         Load the file with the given name using its native sampling rate into
         a numpy array representing the audio time series.
@@ -122,26 +123,27 @@ class AudioTool:
         :return whether the provided signal was mono or stereo
         """
         is_mono = True
-        self.fileName = file_name
-        self.y, self.orig_sr = sf.read(self.fileName, dtype='float32')
+        self.file_name = file_name
+        self.y, self.native_sr = sf.read(self.file_name, dtype='float32')
         if self.y.ndim > 1:
             # This line of code was developed using generative AI.
             self.y = (self.y[:, 0] + self.y[:, 1]) / 2
             is_mono = False
 
-        self.sr = self.orig_sr
+        self.sr = self.native_sr
         return is_mono
 
-    def produceWaveform(self):
+    def produce_waveform(self):
         """ Graph the amplitude over time waveform of the loaded array. """
-        self.ax[0].cla()
+        self.figure.axes[0].cla()
         times = np.linspace(0, len(self.y) / self.sr, len(self.y), dtype='float32')
-        self.ax[0].step(times, self.y, where='post')
-        self.ax[0].set_title(f"Waveform of {self.getFileName()} at {self.sr}Hz")
-        self.ax[0].set_ylabel('Amplitude')
-        self.ax[0].label_outer()
+        self.figure.axes[0].step(times, self.y, where='post')
+        self.figure.axes[0].set_title(f"Waveform of {self.get_file_name()} at {self.sr}Hz")
+        self.figure.axes[0].set_ylabel('Amplitude')
+        self.figure.axes[0].label_outer()
 
-    def produceSpectrogram(self, n_fft, hop_length, window, scale, n_mels, cmap):
+    def produce_spectrogram(self, n_fft=1024, hop_length=256, window=hann(1024),
+                            scale='mel', n_mels=80, cmap='grey'):
         """
         Produce a spectrogram of the loaded array with a set of provided details.
 
@@ -155,7 +157,7 @@ class AudioTool:
         # Clear all pre-existing information
         if self.colorbar is not None:
             self.colorbar.remove()
-        self.ax[1].cla()
+        self.figure.axes[1].cla()
 
         # Create the spectrogram by taking the absolute square of the STFT
         SFT = ShortTimeFFT(win=window, hop=hop_length, fs=self.sr, fft_mode='onesided', mfft=n_fft)
@@ -167,11 +169,11 @@ class AudioTool:
 
         if scale == 'mel':
             Sx_db = np.dot(self.construct_filterbank(n_fft, n_mels), Sx_db)
-            self.ax[1].set_yscale(value='symlog', base=2, linthresh=1000)
+            self.figure.axes[1].set_yscale(value='symlog', base=2, linthresh=1000)
         elif scale == 'logarithmic':
-            self.ax[1].set_yscale(value='symlog', base=2, linthresh=64, linscale=0.5)
+            self.figure.axes[1].set_yscale(value='symlog', base=2, linthresh=64, linscale=0.5)
 
-        self.ax[1].yaxis.set_major_formatter(ScalarFormatter())
+        self.figure.axes[1].yaxis.set_major_formatter(ScalarFormatter())
         x_labels = np.linspace(0, len(self.y) / self.sr, Sx_db.shape[1], dtype=np.float32)
 
         f_max = self.sr / 2
@@ -181,15 +183,15 @@ class AudioTool:
         else:
             y_labels = np.linspace(0, f_max, Sx_db.shape[0], dtype=np.float32)
 
-        img = self.ax[1].pcolormesh(x_labels, y_labels, Sx_db, cmap=cmap)
-        self.colorbar = self.figure.colorbar(img, ax=self.ax[1], format='%+2.0f dB')
+        img = self.figure.axes[1].pcolormesh(x_labels, y_labels, Sx_db, cmap=cmap)
+        self.colorbar = self.figure.colorbar(img, ax=self.figure.axes[1], format='%+2.0f dB')
 
-    def resample(self, target_sr):
+    def resample(self, target_sr=22050):
         """ Change the sampling rate of the numpy array. """
         # If attempting to resample to a larger sampling rate, reload the
         # original recording to prevent or reduce loss of data.
         if target_sr > self.sr:
-            self.loadFile(self.fileName)
+            self.load_file(self.file_name)
         self.y = soxr.resample(self.y, self.sr, target_sr, 'HQ')
         self.sr = target_sr
 
@@ -231,9 +233,10 @@ class UI(QMainWindow):
     def __init__(self):
         super(UI, self).__init__()
 
-        # FILE
+        # BASIC INITIALISATION & LOADING
         uic.loadUi('ui-25-01.ui', self)
         central_widget = self.findChild(QWidget, 'centralwidget')
+        self.audio_tool = None
 
         # MENU BAR
         action_new = self.findChild(QAction, 'actionNew')
@@ -251,13 +254,13 @@ class UI(QMainWindow):
         open_file_button = QPushButton('Select Audio File')
         open_file_button.clicked.connect(self.import_file)
 
-        self.file_label = QLabel('No file selected')
+        self.file_label = QLabel()
         self.file_label.setAlignment(Qt.AlignCenter)
 
-        self.channel_label = QLabel('')
+        self.channel_label = QLabel()
         self.channel_label.setAlignment(Qt.AlignCenter)
 
-        alert_label = QLabel('This will clear all existing graphs.')
+        alert_label = QLabel('This will clear all existing graphs and fields.')
         alert_label.setAlignment(Qt.AlignCenter)
         alert_label.setStyleSheet("color: red;")
 
@@ -272,17 +275,14 @@ class UI(QMainWindow):
         resample_frame.setAutoFillBackground(True)
         resample_frame.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
 
-        self.sample_rate_field = QLineEdit("22050")
-        self.sample_rate_field.setValidator(QIntValidator())
-        self.sample_rate_field.textEdited.connect(
-            lambda: self.sample_rate_field.setStyleSheet(QLineEdit().styleSheet()))
+        self.sample_rate_field = QLineEdit()
 
         self.resample_button = QPushButton('Resample')
         self.resample_button.clicked.connect(self.resample_wave)
         self.resample_button.setEnabled(False)
 
-        self.native_rate_label = QLabel('No file selected')
-        self.sample_rate_label = QLabel('')
+        self.native_rate_label = QLabel()
+        self.sample_rate_label = QLabel()
 
         alert_label = QLabel('This will not affect an existing spectrogram.')
         alert_label.setAlignment(Qt.AlignCenter)
@@ -305,25 +305,10 @@ class UI(QMainWindow):
         spectrogram_frame.setAutoFillBackground(True)
         spectrogram_frame.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
 
-        self.fft_field = QLineEdit("1024")
-        self.fft_field.setValidator(QIntValidator())
-        self.fft_field.textEdited.connect(
-            lambda: self.fft_field.setStyleSheet(QLineEdit().styleSheet()))
-
-        self.hop_field = QLineEdit("256")
-        self.hop_field.setValidator(QIntValidator())
-        self.hop_field.textEdited.connect(
-            lambda: self.hop_field.setStyleSheet(QLineEdit().styleSheet()))
-
-        self.window_length_field = QLineEdit("1024")
-        self.window_length_field.setValidator(QIntValidator())
-        self.window_length_field.textEdited.connect(
-            lambda: self.window_length_field.setStyleSheet(QLineEdit().styleSheet()))
-
-        self.mel_field = QLineEdit("80")
-        self.mel_field.setValidator(QIntValidator())
-        self.mel_field.textEdited.connect(
-            lambda: self.mel_field.setStyleSheet(QLineEdit().styleSheet()))
+        self.fft_field = QLineEdit()
+        self.hop_field = QLineEdit()
+        self.window_length_field = QLineEdit()
+        self.mel_field = QLineEdit()
 
         self.window_combobox = QComboBox()
         for window in WINDOW_FUNCTIONS.keys():
@@ -355,6 +340,16 @@ class UI(QMainWindow):
         spectrogram_form.addRow(QLabel("Reverse Colours?"), self.reverse_checkbox)
         spectrogram_form.addRow(self.spectrogram_button)
 
+        # CONFIGURE TEXT FIELD SETTINGS
+        pos_int_validator = QIntValidator()
+        pos_int_validator.setBottom(1)
+
+        fields = [self.sample_rate_field, self.fft_field, self.hop_field,
+                  self.window_length_field, self.mel_field]
+        for field in fields:
+            field.setValidator(pos_int_validator)
+            field.textEdited.connect(lambda _, f=field: f.setStyleSheet(QLineEdit().styleSheet()))
+
         # TAB MENU
         tab_widget = TabWidget()
         tab_widget.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
@@ -365,12 +360,10 @@ class UI(QMainWindow):
         tab_widget.addTab(QWidget(), "Hide")
 
         # PLOT CONTAINER
-        # TODO: see about leaving this convoluted method
         plotting_frame = self.findChild(QFrame, 'specFrame')
         plotting_frame.setLayout(QVBoxLayout())
         self.canvas = FigureCanvasQTAgg(plt.Figure(layout='constrained'))
         plotting_frame.layout().addWidget(self.canvas)
-        self.audio_tool = AudioTool(self.canvas.figure)
 
         plot_layout = QVBoxLayout()
         plot_layout.setSpacing(0)
@@ -388,6 +381,7 @@ class UI(QMainWindow):
         grid_layout.addWidget(tab_widget, 0, 0, 1, 1)
 
         # SHOW WINDOW
+        self.reset()
         self.adjustSize()
         self.show()
 
@@ -398,20 +392,33 @@ class UI(QMainWindow):
         self.audio_tool = AudioTool(self.canvas.figure)
         self.canvas.draw()
 
-        # Configure all parameter fields to the default upon opening
+        # Configure all parameter fields to the default upon opening.
         self.file_label.setText('No file selected')
         self.channel_label.setText('')
         self.native_rate_label.setText('No file selected')
         self.sample_rate_label.setText('')
-        self.sample_rate_field.setText("22050")
-        self.fft_field.setText("1024")
-        self.hop_field.setText("256")
-        self.window_length_field.setText("1024")
-        self.mel_field.setText("80")
+
+        # The default parameters are derived from the spectrogram creation function's defaults.
+        self.sample_rate_field.setText(
+            f"{signature(self.audio_tool.resample).parameters['target_sr'].default}"
+        )
+        self.fft_field.setText(
+            f"{signature(self.audio_tool.produce_spectrogram).parameters['n_fft'].default}"
+        )
+        self.hop_field.setText(
+            f"{signature(self.audio_tool.produce_spectrogram).parameters['hop_length'].default}"
+        )
+        self.window_length_field.setText(
+            f"{len(signature(self.audio_tool.produce_spectrogram).parameters['window'].default)}"
+        )
+        self.mel_field.setText(
+            f"{signature(self.audio_tool.produce_spectrogram).parameters['n_mels'].default}"
+        )
+
         self.window_combobox.setCurrentIndex(0)
         self.scale_combobox.setCurrentIndex(0)
-        self.mel_field.setEnabled(True)
         self.colour_combobox.setCurrentIndex(0)
+        self.mel_field.setEnabled(True)
         self.reverse_checkbox.setChecked(False)
         self.resample_button.setEnabled(False)
         self.spectrogram_button.setEnabled(False)
@@ -427,8 +434,8 @@ class UI(QMainWindow):
         if file_name:
             # Clear any existing plots and draw a new waveform graph.
             self.reset()
-            is_mono = self.audio_tool.loadFile(file_name)
-            self.audio_tool.produceWaveform()
+            is_mono = self.audio_tool.load_file(file_name)
+            self.audio_tool.produce_waveform()
             self.canvas.draw()
 
             # Enable the graphing buttons to be toggled.
@@ -438,10 +445,12 @@ class UI(QMainWindow):
             # Configure info labels to display text based on the provided sound.
             channel = "Mono-channel signal" if is_mono else \
                 "Multi-channel signal - channels have been averaged"
-            self.file_label.setText(f"{self.audio_tool.getFileName()} selected")
+            self.file_label.setText(f"{self.audio_tool.get_file_name()} selected")
             self.channel_label.setText(f"{channel}")
-            self.native_rate_label.setText(f"Original Sampling Rate: {self.audio_tool.getOriginalSampleRate()}Hz")
-            self.sample_rate_label.setText(f"Current Sampling Rate: {self.audio_tool.getCurrentSampleRate()}Hz")
+            self.native_rate_label.setText(f"Original Sampling Rate: "
+                                           f"{self.audio_tool.get_native_rate()}Hz")
+            self.sample_rate_label.setText(f"Current Sampling Rate: "
+                                           f"{self.audio_tool.get_sample_rate()}Hz")
 
     def export_graph(self):
         """
@@ -458,12 +467,12 @@ class UI(QMainWindow):
         Change the sampling rate of an existing waveform diagram.
         """
         # Outline the text box and cancel the operation if the text entry is not int
-        is_valid, new_sr = retrieve_int_field(self.sample_rate_field, True)
+        is_valid, new_sr = retrieve_int_field(self.sample_rate_field)
         if not is_valid:
             return
 
         self.audio_tool.resample(new_sr)
-        self.audio_tool.produceWaveform()
+        self.audio_tool.produce_waveform()
         self.sample_rate_label.setText(f"Current Sampling Rate: {new_sr}Hz")
         self.canvas.draw()
 
@@ -473,7 +482,7 @@ class UI(QMainWindow):
         that the user has entered in the text fields.
         """
         # Check every text field and outline it if it is invalid
-        is_valid, fft = retrieve_int_field(self.fft_field, True)
+        is_valid, fft = retrieve_int_field(self.fft_field)
         is_valid, hop = retrieve_int_field(self.hop_field, is_valid)
         is_valid, win = retrieve_int_field(self.window_length_field, is_valid)
         is_valid, mel = retrieve_int_field(self.mel_field, is_valid)
@@ -490,8 +499,8 @@ class UI(QMainWindow):
         window = WINDOW_FUNCTIONS.get(self.window_combobox.currentText())(win)
 
         # Create the spectrogram and apply it to the canvas
-        self.audio_tool.produceSpectrogram(n_fft=fft, hop_length=hop, n_mels=mel, window=window,
-                                           scale=scale, cmap=cmap)
+        self.audio_tool.produce_spectrogram(n_fft=fft, hop_length=hop, n_mels=mel, window=window,
+                                            scale=scale, cmap=cmap)
         self.canvas.draw()
 
 
