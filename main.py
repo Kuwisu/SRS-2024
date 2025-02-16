@@ -28,6 +28,13 @@ WINDOW_FUNCTIONS = {"Hanning": hann,
 # Colour maps chosen are ones that blend from one colour to a different one.
 COLOUR_MAPS = ["Gray", "Magma", "Inferno", "Plasma", "Viridis", "Cividis"]
 
+def article_preceding_integer(value):
+    """ Returns whether the indefinite article preceding an integer should be 'a' or 'an' """
+    first_digit = str(value)[0]
+    if first_digit == '8' or value == 11:
+        return 'an'
+    return 'a'
+
 def hz_to_mels(freq):
     """ Convert a frequency or array of frequencies to the Mel scale. """
     return 2595 * np.log10(1 + freq/700)
@@ -36,13 +43,14 @@ def mels_to_hz(freq):
     """ Convert a frequency or array of frequencies in the Mel scale to Hz. """
     return 700 * (10**(freq/2595) - 1)
 
-def retrieve_int_field(line_edit, is_valid=True):
+def retrieve_int_field(line_edit, is_valid=True, error_colour=True):
     """
     Text entries are checked to make sure they are valid integers.
-    If not, the text box is cleared and coloured red to signal an error.
+    If not, the text box is cleared and optionally coloured red to signal an error.
 
     :param line_edit: the text field to validate
     :param is_valid: whether the overall form is currently valid
+    :param error_colour: whether the text box should be colored red
     :return: True if integer or disabled, False otherwise; also return
     the text contained in the line edit
     """
@@ -52,7 +60,8 @@ def retrieve_int_field(line_edit, is_valid=True):
         value = 0
         if line_edit.isEnabled():
             line_edit.setText("")
-            line_edit.setStyleSheet("border: 1px solid red;")
+            if error_colour:
+                line_edit.setStyleSheet("border: 1px solid red;")
             return False, value
     return is_valid, value
 
@@ -245,9 +254,12 @@ class UI(QMainWindow):
         action_new = self.findChild(QAction, 'actionNew')
         action_open = self.findChild(QAction, 'actionOpen')
         action_save_png = self.findChild(QAction, 'actionSavePng')
+        action_save_txt = self.findChild(QAction, 'actionSaveText')
+
         action_new.triggered.connect(self.reset)
         action_open.triggered.connect(self.import_file)
         action_save_png.triggered.connect(self.export_graph)
+        action_save_txt.triggered.connect(self.export_parameters)
 
         # SOUND IMPORT TAB
         sound_import_frame = QFrame(central_widget)
@@ -464,6 +476,51 @@ class UI(QMainWindow):
                                            pathlib.Path().resolve().as_posix(),
                                            'PNG File (*.png)')
         self.canvas.figure.savefig(name[0], format='png')
+
+    def export_parameters(self):
+        """
+        Prompt the user to enter a file name on the file explorer, then saves all added
+        parameters in a TXT paragraph to that file location. If any key qualities are
+        missing, display a message box alerting the user to them.
+        """
+        missing_info = QMessageBox()
+        missing_info.setIcon(QMessageBox.Warning)
+        missing_info.setWindowTitle("Error saving parameters")
+
+        if self.audio_tool.get_file_name() == '':
+            missing_info.setText('No file has been imported.')
+            missing_info.exec_()
+            return
+
+        # Safely extract info from every text field
+        is_valid, fft = retrieve_int_field(self.fft_field)
+        is_valid, hop = retrieve_int_field(self.hop_field, is_valid)
+        is_valid, win = retrieve_int_field(self.window_length_field, is_valid)
+        is_valid, mels = retrieve_int_field(self.mel_field, is_valid)
+
+        if not is_valid:
+            missing_info.setText("Some text fields are not populated correctly.")
+            missing_info.setInformativeText("These have been highlighted.")
+            missing_info.exec_()
+            return
+
+        sample_rate = self.audio_tool.get_sample_rate()
+        scale = self.scale_combobox.currentText().lower()
+        window = self.window_combobox.currentText()
+
+        # Retrieve whether it will start with 'a' or 'an' based on the following integer's sound
+        article = article_preceding_integer(mels) if scale == 'mel' else "a"
+        dimension = f"{mels}-band " if scale == 'mel' else ""
+
+        contents = (f"{article} {dimension}{scale} spectrogram, computed using an STFT with {fft} "
+                    f"bins, a hop size of {hop}, and a {window} window of length {win}, at a "
+                    f"{sample_rate}Hz sampling rate.")
+
+        name = QFileDialog.getSaveFileName(self, 'Save file',
+                                           pathlib.Path().resolve().as_posix(),
+                                           'Text File (*.txt)')
+        with open(name[0], 'w') as f:
+            f.write(contents)
 
     def resample_wave(self):
         """
