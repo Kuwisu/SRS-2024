@@ -207,20 +207,20 @@ class AudioTool:
         # Retrieve the center frequencies of mel banks, then convert them to FFT bins
         f_max = self.sr / 2
         mel_banks = np.linspace(0, hz_to_mels(f_max), n_mels+2, dtype=np.float32)
-        mel_banks = np.floor((n_fft+1) * mels_to_hz(mel_banks) / self.sr).astype(int)
+        mel_bins = np.floor((n_fft+1) * mels_to_hz(mel_banks) / self.sr)
 
         # Construct a mel transformation matrix
         weights = np.zeros((n_mels, int(n_fft//2 + 1)), dtype=np.float32)
         for i in range(1, n_mels+1):
-            for j in range(1, int(n_fft//2 + 1)):
-                if mel_banks[i - 1] <= j <= mel_banks[i]:
-                    den = mel_banks[i] - mel_banks[i - 1]
-                    if den != 0:
-                        weights[i - 1, j] = (j - mel_banks[i - 1]) / den
-                elif mel_banks[i] < j < mel_banks[i + 1]:
-                    den = mel_banks[i + 1] - mel_banks[i]
-                    if den != 0:
-                        weights[i - 1, j] = (mel_banks[i + 1] - j) / den
+            left = mel_bins[i-1]
+            center = mel_bins[i]
+            right = mel_bins[i+1]
+
+            for j in range(int(left), int(center)):
+                weights[i - 1, j] = (j - left) / (center - left)
+
+            for j in range(int(center), int(right)):
+                weights[i - 1, j] = (right - j) / (right - center)
 
         # Normalise the matrix, adding a small value to prevent division errors
         return weights / (np.sum(weights, axis=1, keepdims=True)+1e-10)
