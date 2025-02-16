@@ -31,6 +31,7 @@ COLOUR_MAPS = ["Gray", "Magma", "Inferno", "Plasma", "Viridis", "Cividis"]
 def article_preceding_integer(value):
     """ Returns whether the indefinite article preceding an integer should be 'a' or 'an' """
     first_digit = str(value)[0]
+    # 11 and any value starting with 8 has an 'e' rather than a consonant sound
     if first_digit == '8' or value == 11:
         return 'an'
     return 'a'
@@ -43,14 +44,13 @@ def mels_to_hz(freq):
     """ Convert a frequency or array of frequencies in the Mel scale to Hz. """
     return 700 * (10**(freq/2595) - 1)
 
-def retrieve_int_field(line_edit, is_valid=True, error_colour=True):
+def retrieve_int_field(line_edit, is_valid=True):
     """
     Text entries are checked to make sure they are valid integers.
     If not, the text box is cleared and optionally coloured red to signal an error.
 
     :param line_edit: the text field to validate
     :param is_valid: whether the overall form is currently valid
-    :param error_colour: whether the text box should be colored red
     :return: True if integer or disabled, False otherwise; also return
     the text contained in the line edit
     """
@@ -60,8 +60,7 @@ def retrieve_int_field(line_edit, is_valid=True, error_colour=True):
         value = 0
         if line_edit.isEnabled():
             line_edit.setText("")
-            if error_colour:
-                line_edit.setStyleSheet("border: 1px solid red;")
+            line_edit.setStyleSheet("border: 1px solid red;")
             return False, value
     return is_valid, value
 
