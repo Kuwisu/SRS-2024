@@ -181,6 +181,12 @@ class AudioTool:
         elif scale == 'logarithmic':
             self.figure.axes[1].set_yscale(value='symlog', base=2, linthresh=64, linscale=0.5)
 
+        # Display the colour bar in fixed ticks
+        interval = 10
+        lowest_tick = sx_db.min() + interval - (sx_db.min() % interval)
+        num_ticks = int(np.abs(lowest_tick) / interval) + 1
+        colorbar_ticks = np.linspace(lowest_tick, 0, num_ticks, dtype=sx_db.dtype)
+
         self.figure.axes[1].yaxis.set_major_formatter(ScalarFormatter())
         x_labels = np.linspace(0, len(self.y) / self.sr, sx_db.shape[1], dtype=np.float32)
 
@@ -193,6 +199,7 @@ class AudioTool:
 
         img = self.figure.axes[1].pcolormesh(x_labels, y_labels, sx_db, cmap=cmap)
         self.colorbar = self.figure.colorbar(img, ax=self.figure.axes[1], format='%+2.0f dB')
+        self.colorbar.ax.get_yaxis().set_ticks(colorbar_ticks)
 
     def resample(self, target_sr=22050):
         """ Change the sampling rate of the numpy array. """
