@@ -164,11 +164,6 @@ class AudioTool:
         :param n_mels: the number of bands in the mel filter bank
         :param cmap: the colour map used to display the spectrogram
         """
-        # Clear all pre-existing information
-        if self.colorbar is not None:
-            self.colorbar.remove()
-        self.figure.axes[1].cla()
-
         # Create the spectrogram by taking the absolute square of the STFT
         sft = ShortTimeFFT(win=window, hop=hop_length, fs=self.sr, fft_mode='onesided', mfft=n_fft)
         sx = np.abs(sft.stft(self.y, p0=0, p1=int(np.ceil(len(self.y) / hop_length)))) ** 2
@@ -190,16 +185,22 @@ class AudioTool:
         colorbar_ticks = np.linspace(lowest_tick, 0, num_ticks, dtype=sx_db.dtype)
 
         self.figure.axes[1].yaxis.set_major_formatter(ScalarFormatter())
-        x_labels = np.linspace(0, len(self.y) / self.sr, sx_db.shape[1], dtype=np.float32)
+        time_steps = np.linspace(0, len(self.y) / self.sr, sx_db.shape[1], dtype=np.float32)
 
         f_max = self.sr / 2
         if scale == 'mel':
-            y_labels = np.linspace(0, hz_to_mels(f_max), sx_db.shape[0], dtype=np.float32)
-            y_labels = mels_to_hz(y_labels)
+            freq_steps = np.linspace(0, hz_to_mels(f_max), sx_db.shape[0], dtype=np.float32)
+            freq_steps = mels_to_hz(freq_steps)
         else:
-            y_labels = np.linspace(0, f_max, sx_db.shape[0], dtype=np.float32)
+            freq_steps = np.linspace(0, f_max, sx_db.shape[0], dtype=np.float32)
 
-        img = self.figure.axes[1].pcolormesh(x_labels, y_labels, sx_db, cmap=cmap)
+        # Clear all pre-existing information
+        if self.colorbar is not None:
+            self.colorbar.remove()
+        self.figure.axes[1].cla()
+
+        # Create a spectrogram image and colourbar
+        img = self.figure.axes[1].pcolormesh(time_steps, freq_steps, sx_db, cmap=cmap)
         self.colorbar = self.figure.colorbar(img, ax=self.figure.axes[1], format='%+2.0f dB')
         self.colorbar.ax.get_yaxis().set_ticks(colorbar_ticks)
 
