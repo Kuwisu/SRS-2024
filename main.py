@@ -1,3 +1,5 @@
+import traceback
+from idlelib.browser import file_open
 from inspect import signature
 import pathlib
 import sys
@@ -478,10 +480,11 @@ class UI(QMainWindow):
         Prompt the user to enter a file name on the file explorer, then saves
         the current image as a PNG to that file location.
         """
-        name = QFileDialog.getSaveFileName(self, 'Save file',
+        file_name = QFileDialog.getSaveFileName(self, 'Save file',
                                            pathlib.Path().resolve().as_posix(),
-                                           'PNG File (*.png)')
-        self.canvas.figure.savefig(name[0], format='png')
+                                           'PNG File (*.png)')[0]
+        if file_name:
+            self.canvas.figure.savefig(file_name, format='png')
 
     def export_parameters(self):
         """
@@ -518,15 +521,16 @@ class UI(QMainWindow):
         article = article_preceding_integer(mels) if scale == 'mel' else "a"
         dimension = f"{mels}-band " if scale == 'mel' else ""
 
-        contents = (f"{article} {dimension}{scale} spectrogram, computed using an STFT with {fft} "
-                    f"bins, a hop size of {hop}, and a {window} window of length {win}, at a "
-                    f"{sample_rate}Hz sampling rate.")
+        contents = (f"{article} {dimension}{scale} spectrogram at a {sample_rate}Hz sampling rate "
+                    f"computed using an STFT with {fft} bins, a hop size of {hop}, "
+                    f"and a {window} window of length {win}.")
 
-        name = QFileDialog.getSaveFileName(self, 'Save file',
+        file_name = QFileDialog.getSaveFileName(self, 'Save file',
                                            pathlib.Path().resolve().as_posix(),
-                                           'Text File (*.txt)')
-        with open(name[0], 'w') as f:
-            f.write(contents)
+                                           'Text File (*.txt)')[0]
+        if file_name:
+            with open(file_name, 'w') as f:
+                f.write(contents)
 
     def resample_wave(self):
         """
