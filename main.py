@@ -164,6 +164,11 @@ class AudioTool:
         :param n_mels: the number of bands in the mel filter bank
         :param cmap: the colour map used to display the spectrogram
         """
+        # Clear all pre-existing information
+        if self.colorbar is not None:
+            self.colorbar.remove()
+        self.figure.axes[1].cla()
+
         # Create the spectrogram by taking the absolute square of the STFT
         sft = ShortTimeFFT(win=window, hop=hop_length, fs=self.sr, fft_mode='onesided', mfft=n_fft)
         sx = np.abs(sft.stft(self.y, p0=0, p1=int(np.ceil(len(self.y) / hop_length)))) ** 2
@@ -193,11 +198,6 @@ class AudioTool:
             freq_steps = mels_to_hz(freq_steps)
         else:
             freq_steps = np.linspace(0, f_max, sx_db.shape[0], dtype=np.float32)
-
-        # Clear all pre-existing information
-        if self.colorbar is not None:
-            self.colorbar.remove()
-        self.figure.axes[1].cla()
 
         # Create a spectrogram image and colourbar
         img = self.figure.axes[1].pcolormesh(time_steps, freq_steps, sx_db, cmap=cmap)
