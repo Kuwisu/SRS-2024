@@ -172,3 +172,6 @@ cython_debug/
 
 # Pylint config file
 .pylintrc
+
+# PyInstaller plugin
+src/pyinstaller.exe
